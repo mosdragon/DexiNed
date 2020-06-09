@@ -26,8 +26,8 @@ slim = tf.contrib.slim
 
 class DexinedModel():
 
-    PRETRAINED_MODEL_PATH = "../checkpoints/DXN_BIPED/train_2/DXN-149999"
-    # PRETRAINED_MODEL_PATH = "../checkpoints/DXN_BIPED/train_1/DXN-149736"
+    # PRETRAINED_MODEL_PATH = "/home/mxs8x15/code/new_hed/DexiNed/checkpoints/DXN_BIPED/train_2/DXN-149999"
+    PRETRAINED_MODEL_PATH = "/home/mxs8x15/code/new_hed/DexiNed/checkpoints/DXN_BIPED/train_1/DXN-149736"
     TARGET_H = TARGET_W = 512
     N_CHANNELS = 3
 
@@ -82,6 +82,8 @@ class DexinedModel():
         B = np.mean(img[:, :, 2])
         img -= np.array([R, G, B])
         img = cv.resize(img, dsize=(self.img_width, self.img_height))
+        
+        self.setup_testing()
 
         edge_maps = session.run(self.predictions, feed_dict={self.images: [img]})
         single_edge_map = self.get_single_edgemap(img, edge_maps, threshold=0.0)
@@ -116,7 +118,7 @@ class DexinedModel():
 
 
 
-    def setup_testing(self, session):
+    def setup_testing(self):
         """
             Apply sigmoid non-linearity to side layer ouputs + fuse layer outputs for predictions
         """
@@ -127,7 +129,7 @@ class DexinedModel():
             self.predictions.append(output)
 
     
-    def _conv_layer(self, inputs, filters=None, kernel_size=None, depth_multiplier=None,
+    def conv_layer(self, inputs, filters=None, kernel_size=None, depth_multiplier=None,
                    padding='same', activation=None, name=None,
                    kernel_initializer=None, strides=(1,1), separable_conv=False):
 
@@ -141,7 +143,7 @@ class DexinedModel():
         return conv
 
     
-    def _side_layer(self, inputs, filters=None,kernel_size=None, strides=(1,1),
+    def side_layer(self, inputs, filters=None,kernel_size=None, strides=(1,1),
                    name=None, upscale=None, sub_pixel=False,kernel_init=None):
         """
             https://github.com/s9xie/hed/blob/9e74dd710773d8d8a469ad905c76f4a7fa08f945/examples/hed/train_val.prototxt#L122
@@ -159,7 +161,7 @@ class DexinedModel():
                 while (scale<=upscale):
                     if scale==upscale:
 
-                        sub_net = self._conv_layer(sub_net, filters=filters, kernel_size=kernel_size,
+                        sub_net = self.conv_layer(sub_net, filters=filters, kernel_size=kernel_size,
                                                   strides=strides,kernel_initializer=tf.truncated_normal_initializer(mean=0.0),
                                                   name=name + '_conv_{}'.format(i))  # bx100x100x64
                         biases = tf.Variable(tf.constant(0.0, shape=[filters], dtype=tf.float32),
@@ -173,7 +175,7 @@ class DexinedModel():
                             name='{}_deconv_{}_{}'.format(name, upscale, i)) # upscale/2
                     else:
 
-                        sub_net = self._conv_layer(sub_net, filters=output_filters,
+                        sub_net = self.conv_layer(sub_net, filters=output_filters,
                                                   kernel_size=kernel_size,kernel_initializer=kernel_init,
                                                   strides=strides, name=name + '_conv_{}'.format(i))  # bx100x100x64 tf.truncated_normal_initializer(mean=0.0, stddev=0.15)
                         biases = tf.Variable(tf.constant(0.0, shape=[output_filters], dtype=tf.float32),
@@ -195,7 +197,7 @@ class DexinedModel():
 
                     if scale == upscale:
                         cur_shape = sub_net.get_shape().as_list()
-                        sub_net = self._conv_layer(sub_net, filters=1,
+                        sub_net = self.conv_layer(sub_net, filters=1,
                                                   kernel_size=3, kernel_initializer=kernel_init,
                                                   strides=strides, name=name + '_conv'+str(i))  # bx100x100x64 tf.truncated_normal_initializer(mean=0.0, stddev=0.15)
                         biases = tf.Variable(tf.constant(0.0, shape=[1], dtype=tf.float32),
@@ -205,11 +207,11 @@ class DexinedModel():
                         if cur_shape[1]== self.img_height and cur_shape[2]==self.img_width:
                             pass
                         else:
-                            sub_net = self._upscore_layer(input=sub_net,n_outputs=1,stride=upscale,ksize=upscale,
+                            sub_net = self.upscore_layer(input=sub_net,n_outputs=1,stride=upscale,ksize=upscale,
                                                       name=name+'_bdconv'+str(i))
                     else:
                         cur_shape = sub_net.get_shape().as_list()
-                        sub_net = self._conv_layer(sub_net, filters=output_filters,
+                        sub_net = self.conv_layer(sub_net, filters=output_filters,
                                                   kernel_size=3, kernel_initializer=kernel_init,
                                                   strides=strides, name=name + '_conv' + str(
                                 i))  # bx100x100x64 tf.truncated_normal_initializer(mean=0.0, stddev=0.15)
@@ -220,7 +222,7 @@ class DexinedModel():
                         if cur_shape[1] == self.img_height and cur_shape[2] == self.img_width:
                             pass
                         else:
-                            sub_net = self._upscore_layer(input=sub_net, n_outputs=output_filters, stride=upscale, ksize=upscale,
+                            sub_net = self.upscore_layer(input=sub_net, n_outputs=output_filters, stride=upscale, ksize=upscale,
                                                           name=name + '_bdconv' + str(i))
                     i += 1
                     scale = 2 ** i
@@ -229,7 +231,7 @@ class DexinedModel():
                 # Upsampling by subPixel convolution
                 while (scale <= upscale):
                     if scale == upscale:
-                        sub_net = self._conv_layer(sub_net, filters=4,
+                        sub_net = self.conv_layer(sub_net, filters=4,
                                                   kernel_size=3, kernel_initializer=kernel_init,
                                                   strides=strides, name=name + '_conv'+str(i))  # bx100x100x64 tf.truncated_normal_initializer(mean=0.0, stddev=0.15)
                         biases = tf.Variable(tf.constant(0.0, shape=[4], dtype=tf.float32),
@@ -247,7 +249,7 @@ class DexinedModel():
                             raise Exception(' the output channel is not setted')
                     else:
 
-                        sub_net = self._conv_layer(
+                        sub_net = self.conv_layer(
                             sub_net, filters=32, kernel_size=3, kernel_initializer=kernel_init,
                             strides=strides, name=name + '_conv' + str(i))  # bx100x100x32
                         biases = tf.Variable(tf.constant(0.0, shape=[32], dtype=tf.float32),
@@ -276,7 +278,7 @@ class DexinedModel():
         
         return classifier
 
-    def _upscore_layer(self, input, n_outputs, name,
+    def upscore_layer(self, input, n_outputs, name,
                        ksize=4, stride=2,shape=None):
         
         strides = [1, stride, stride, 1]
@@ -343,7 +345,7 @@ class DexinedModel():
             self.conv1_2 = slim.batch_norm(self.conv1_2)
             self.conv1_2 = tf.nn.relu(self.conv1_2)
 
-            self.output1 = self._side_layer(self.conv1_2,name='output1',filters=1, upscale=int(2 ** 1),
+            self.output1 = self.side_layer(self.conv1_2,name='output1',filters=1, upscale=int(2 ** 1),
                                            strides=(1,1),kernel_size=[1,1],sub_pixel=use_subpixel,
                                            kernel_init=weight_init)  # bx400x400x1
             self.rconv1 = tf.layers.conv2d(
@@ -371,7 +373,7 @@ class DexinedModel():
             self.maxpool2_1=slim.max_pool2d(self.block2_xcp,kernel_size=[3,3],stride=2, padding='same',
                                         scope='maxpool2_1') # bx100x100x128
             self.add2_1 = tf.add(self.maxpool2_1, self.rconv1)# with skip left
-            self.output2 = self._side_layer(self.block2_xcp,filters=1,name='output2', upscale=int(2 ** 1),
+            self.output2 = self.side_layer(self.block2_xcp,filters=1,name='output2', upscale=int(2 ** 1),
                                            strides=(1,1),kernel_size=[1,1],sub_pixel=use_subpixel,
                                            kernel_init=weight_init) # bx400x400x1
             self.rconv2= tf.layers.conv2d(
@@ -412,7 +414,7 @@ class DexinedModel():
                 kernel_initializer=weight_init, strides=(2, 2), bias_initializer=tf.constant_initializer(0.0),
                 padding='SAME', name="rconv3")  # bx25x25x512  # skip left
             self.rconv3 = slim.batch_norm(self.rconv3) # skip left
-            self.output3 = self._side_layer(self.block3_xcp, filters=1,name='output3', upscale=int(2 ** 2),
+            self.output3 = self.side_layer(self.block3_xcp, filters=1,name='output3', upscale=int(2 ** 2),
                                            strides=(1,1),kernel_size=[1,1],sub_pixel=use_subpixel,
                                            kernel_init=weight_init)   # bx400x400x1
 
@@ -451,7 +453,7 @@ class DexinedModel():
                 padding='SAME', name="rconv4")  # bx25x25x512  # skip leff
             self.rconv4 = slim.batch_norm(self.rconv4)   # skip left
 
-            self.output4 = self._side_layer(self.block4_xcp, filters=1,name='output4', upscale=int(2 ** 3),
+            self.output4 = self.side_layer(self.block4_xcp, filters=1,name='output4', upscale=int(2 ** 3),
                                            strides=(1,1),kernel_size=[1,1],sub_pixel=use_subpixel,
                                            kernel_init=weight_init)  # bx400x400x1
 
@@ -485,7 +487,7 @@ class DexinedModel():
                 self.block5_xcp=tf.add(self.block5_xcp,self.addb2b5)/2 # wwith  right skip
 
             self.add5_1 = tf.add(self.block5_xcp, self.rconv4) # with skip left
-            self.output5 = self._side_layer(self.block5_xcp, filters=1,name='output5', kernel_size=[1,1],
+            self.output5 = self.side_layer(self.block5_xcp, filters=1,name='output5', kernel_size=[1,1],
                                            upscale=int(2 ** 4), sub_pixel=use_subpixel, strides=(1,1),
                                            kernel_init=weight_init)
 
@@ -518,7 +520,7 @@ class DexinedModel():
                 self.block6_xcp = slim.batch_norm(self.block6_xcp)
                 self.block6_xcp = tf.add(self.block6_xcp, self.addb25_2b6) / 2 #  with  right skip
 
-            self.output6 = self._side_layer(self.block6_xcp, filters=1, name='output6', kernel_size=[1, 1],
+            self.output6 = self.side_layer(self.block6_xcp, filters=1, name='output6', kernel_size=[1, 1],
                                            upscale=int(2 ** 4), sub_pixel=use_subpixel, strides=(1, 1),
                                            kernel_init=weight_init)
             # ******************** End blocks *****************************************

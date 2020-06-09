@@ -16,7 +16,7 @@ import tensorflow as tf
 
 import utls.dataset_manager as dm
 from train import m_trainer
-from test import m_tester
+from tester import m_tester
 
 def config_model():
 
