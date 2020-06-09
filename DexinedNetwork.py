@@ -44,12 +44,12 @@ class DexinedModel():
         self.img_height = img_height
         self.img_width = img_width
         self.n_channels = n_channels
-    
+
         # Assume batch size is 1 since we're only doing inference.
         self.images = tf.placeholder(tf.float32,
-            [1, img_height, img_width, n_channels])
+            [None, img_height, img_width, n_channels])
 
-        
+
         # Session for TensorFlow version 1.
         config = ConfigProto()
         config.gpu_options.allow_growth = True
@@ -57,8 +57,8 @@ class DexinedModel():
 
 
         # Build the network architecture
-        self._build_network()
-        
+        self.build_network()
+
         # If we're using a pretrained mode, load it in here.
         if use_pretrained:
             saver = tf.train.Saver()
@@ -82,7 +82,7 @@ class DexinedModel():
         B = np.mean(img[:, :, 2])
         img -= np.array([R, G, B])
         img = cv.resize(img, dsize=(self.img_width, self.img_height))
-        
+
         self.setup_testing()
 
         edge_maps = session.run(self.predictions, feed_dict={self.images: [img]})
@@ -97,13 +97,13 @@ class DexinedModel():
 
         edgemap_fused = edge_maps[-2]
         edgemap_fused[edgemap_fused < threshold] = 0.0
-        
+
         edgemap_avg[edgemap_avg < threshold] = 0.0
-        
+
         # Invert colors
         edgemap_fused = 255.0 * (1.0 - edgemap_fused)
         edgemap_avg = 255.0 * (1.0 - edgemap_avg)
-        
+
         edgemap_fused = np.tile(edgemap_fused, [1, 1, 3])
         edgemap_avg = np.tile(edgemap_avg, [1, 1, 3])
 
@@ -128,7 +128,7 @@ class DexinedModel():
             output = tf.nn.sigmoid(b, name='output_{}'.format(idx))
             self.predictions.append(output)
 
-    
+
     def conv_layer(self, inputs, filters=None, kernel_size=None, depth_multiplier=None,
                    padding='same', activation=None, name=None,
                    kernel_initializer=None, strides=(1,1), separable_conv=False):
@@ -142,15 +142,15 @@ class DexinedModel():
                              strides=strides,padding=padding, kernel_initializer=kernel_initializer, name=name)
         return conv
 
-    
+
     def side_layer(self, inputs, filters=None,kernel_size=None, strides=(1,1),
                    name=None, upscale=None, sub_pixel=False,kernel_init=None):
         """
             https://github.com/s9xie/hed/blob/9e74dd710773d8d8a469ad905c76f4a7fa08f945/examples/hed/train_val.prototxt#L122
             1x1 conv followed with Deconvoltion layer to upscale the size of input image sans color
         """
-        
-        def _upsample_block(inputs, filters=None,kernel_size=None, strides=(1,1),
+
+        def upsample_block(inputs, filters=None,kernel_size=None, strides=(1,1),
                    name=None, upscale=None, sub_pixel=False):
             i=1
             scale=2
@@ -271,16 +271,16 @@ class DexinedModel():
             else:
                 raise NotImplementedError
             return sub_net
-        
-        classifier = _upsample_block(inputs, filters=filters,
+
+        classifier = upsample_block(inputs, filters=filters,
             kernel_size=kernel_size, strides=strides,
             name=name, upscale=upscale, sub_pixel=sub_pixel)
-        
+
         return classifier
 
     def upscore_layer(self, input, n_outputs, name,
                        ksize=4, stride=2,shape=None):
-        
+
         strides = [1, stride, stride, 1]
         in_features = input.get_shape().as_list()[3]
 
@@ -295,19 +295,19 @@ class DexinedModel():
             new_shape = [in_shape[0], self.img_height, self.img_width, n_outputs] #output_shape=[,]
         else:
             new_shape = [shape[0], shape[1], shape[2], n_outputs]
-        
+
         output_shape = tf.stack(new_shape)
 
         f_shape = [ksize, ksize, n_outputs, in_features]
         num_input = ksize * ksize * in_features / stride
         stddev = (2 / num_input) ** 0.5
-        weights = self._get_deconv_filter(f_shape,name=name+'_Wb')
+        weights = self.get_deconv_filter(f_shape,name=name+'_Wb')
         deconv = tf.nn.conv2d_transpose(input,weights, output_shape,
                                         strides=strides, padding='SAME', name=name)
         return deconv
 
 
-    def _get_deconv_filter(self, f_shape,name=''):
+    def get_deconv_filter(self, f_shape,name=''):
         width = f_shape[0]
         heigh = f_shape[0]
         f = np.ceil(width / 2.0)
@@ -326,11 +326,11 @@ class DexinedModel():
 
         return tf.get_variable(name=name, initializer=init, shape=weights.shape)
 
-    
-    def _build_network(self, use_subpixel=False):
+
+    def build_network(self, use_subpixel=False):
         weight_init = tf.random_normal_initializer(mean=0.0, stddev=0.01)
 
-        with tf.variable_scope('Xpt') as sc:
+        with tf.compat.v1.variable_scope('Xpt') as sc:
 
             # ------------------------- Block1 ----------------------------------------
             self.conv1_1 = tf.layers.conv2d(self.images, filters=32, kernel_size=[3, 3],
@@ -536,7 +536,7 @@ class DexinedModel():
 
 
 if __name__ == "__main__":
-    img_uri = "../data/living_room.png"
+    img_uri = "data/living_room.png"
     img = imread(img_uri)
     model = DexinedModel()
     em = model.predict(img)
