@@ -7,8 +7,18 @@ Autonomous University of Barcelona-Computer Vision Center
 xsoria@cvc.uab.es/xavysp@gmail.com
 """
 
-import time
 import os
+import warnings
+
+# Ignore warnings
+warnings.simplefilter("ignore")
+
+# Set Tensorflow Logs to Error
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
+
+
+
+import time
 
 from PIL import Image
 import numpy as np
@@ -18,14 +28,18 @@ from imageio import imread, imwrite
 import tensorflow as tf
 from tensorflow.compat.v1 import ConfigProto
 from tensorflow.compat.v1 import InteractiveSession
+
+import skimage.transform
 import cv2
+
 
 slim = tf.contrib.slim
 
 class DexinedModel():
 
     # PRETRAINED_MODEL_PATH = "/home/mxs8x15/code/new_hed/DexiNed/checkpoints/DXN_BIPED/train_2/DXN-149999"
-    PRETRAINED_MODEL_PATH = "/home/mxs8x15/code/new_hed/DexiNed/checkpoints/DXN_BIPED/train_1/DXN-149736"
+    # PRETRAINED_MODEL_PATH = "/home/mxs8x15/code/new_hed/DexiNed/checkpoints/DXN_BIPED/train_1/DXN-149736"
+    PRETRAINED_MODEL_PATH = "checkpoints/DXN_BIPED/train_1/DXN-149736"
     TARGET_H = TARGET_W = 512
     N_CHANNELS = 3
 
@@ -45,6 +59,10 @@ class DexinedModel():
         self.edgemaps = tf.placeholder(tf.float32,
             [None, self.img_height, self.img_width, 1])
 
+        # Log time to load model.
+        start_time = time.time()
+
+
         # Build the network architecture
         self.define_model()
 
@@ -55,8 +73,13 @@ class DexinedModel():
             self.session = InteractiveSession(config=config)
 
             # Load this model in.
-            saver = tf.train.Saver()
+            saver = tf.compat.v1.train.Saver()
             saver.restore(self.session, checkpoint_path)
+
+        # One-time setup
+        self.setup_testing()
+
+        print("Time to load model: {:.2f}s".format(time.time() - start_time))
 
 
     def predict(self, img):
@@ -65,50 +88,57 @@ class DexinedModel():
 
         Args:
             :img: - an RGB image as a numpy array
+
+        Returns:
+            :final_edgemap: - a 1-channel image, of the same height/width
+                as the input img.
         """
 
+        # If the image is not a float32 image, convert it.
         if img.dtype == np.uint8:
             img = img.astype(np.float32) / 255.0
+
+        # Get dimensions of the original image, store it to resize the edgemaps
+        # later.
+        orig_h, orig_w, _ = img.shape
+        img_dimensions = (orig_h, orig_w)
 
         # Remove mean RGB value from image.
         R = np.mean(img[:, :, 0])
         G = np.mean(img[:, :, 1])
         B = np.mean(img[:, :, 2])
-        img -= np.array([R, G, B])
-        img = cv2.resize(img, dsize=(self.img_width, self.img_height))
 
-        self.setup_testing()
+        img[:, :, 0] -= R
+        img[:, :, 1] -= G
+        img[:, :, 2] -= B
 
-        edge_maps = self.session.run(self.predictions, feed_dict={self.images: [img]})
-        single_edge_map = self.get_single_edgemap(img, edge_maps, threshold=0.0)
-        return single_edge_map
+        # Resize image so it can be passed through the network.
+        img = skimage.transform.resize(img, (self.img_width, self.img_height))
+        print(f"Reshaped:  {img.shape}")
+
+        # Turn this single image into a batch, the shape will be (1 x H x W x 3)
+        img_batched = img.reshape((1, self.img_height, self.img_width,
+            self.n_channels))
+
+        # Feed into the network to get back the edgemaps
+        edge_maps = self.session.run(self.predictions, feed_dict={self.images: img_batched})
+
+        # Average the edgemaps and resize into the original image dimensions
+        final_edgemap = self.get_single_edgemap(edge_maps, img_dimensions)
+
+        return final_edgemap
 
 
-    def get_single_edgemap(self, img, edge_maps, threshold=0.0):
+    def get_single_edgemap(self, edge_maps, img_dimensions):
         edge_maps = [e[0] for e in edge_maps]
         edgemap_avg = np.mean(np.array(edge_maps), axis=0)
-        edge_maps.append(edgemap_avg)
+        # Invert colors so edges are 0, spaces are 255
+        edgemap_avg = (255.0 * (1.0 - edgemap_avg)).astype(np.uint8)
 
-        edgemap_fused = edge_maps[-2]
-        edgemap_fused[edgemap_fused < threshold] = 0.0
-
-        edgemap_avg[edgemap_avg < threshold] = 0.0
-
-        # Invert colors
-        edgemap_fused = 255.0 * (1.0 - edgemap_fused)
-        edgemap_avg = 255.0 * (1.0 - edgemap_avg)
-
-        edgemap_fused = np.tile(edgemap_fused, [1, 1, 3])
-        edgemap_avg = np.tile(edgemap_avg, [1, 1, 3])
-
-        edgemap_fused = Image.fromarray(np.uint8(edgemap_fused))
-        edgemap_avg = Image.fromarray(np.uint8(edgemap_avg))
-
-        img_size = img.shape[:2]
-        edgemap_fused = edgemap_fused.resize(img_size)
-        edgemap_avg = edgemap_avg.resize(img_size)
-
-        return edgemap_avg
+        # Resize this edgemap to the dimensions of the original image.
+        final_edgemap = skimage.transform.resize(edgemap_avg, img_dimensions)
+        print(f"Before: {edgemap_avg.shape}    After: {final_edgemap.shape}")
+        return final_edgemap
 
 
     def setup_testing(self):
@@ -127,8 +157,7 @@ class DexinedModel():
         DexiNed is composed by six blocks, the two first blocks have two convolutional layers
         the rest of the blocks is composed by sub blocks and they have 2, 3, 3, 3 sub blocks
         """
-        start_time = time.time()
-        use_subpixel = False
+        use_subpixel = None
         weight_init = tf.random_normal_initializer(mean=0.0, stddev=0.01)
 
         with tf.variable_scope('Xpt') as sc:
@@ -356,7 +385,6 @@ class DexinedModel():
                                         kernel_initializer=tf.constant_initializer(1 / len(self.side_outputs)))
             self.outputs = self.side_outputs + [self.fuse]
 
-        print("Build model finished: {:.4f}s".format(time.time() - start_time))
 
     def max_pool(self, bottom, name):
         return tf.nn.max_pool(bottom, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME', name=name)
@@ -555,9 +583,15 @@ class DexinedModel():
 
 if __name__ == "__main__":
     img_uri = "data/living_room.png"
-    img = imread(img_uri)
-    model = DexinedModel()
-    em = model.predict(img)
 
-    imwrite("em.png", em)
-    imwrite("orig.png", img)
+    # Read image as RGB image.
+    img = imread(img_uri, pilmode="RGB")
+    img = np.asarray(img)
+
+    # Load the Dexined Model.
+    model = DexinedModel()
+
+    # Produce the edgemap from the model.
+    final_edgemap = model.predict(img)
+    imwrite("res0.png", img)
+    imwrite("res1.png", final_edgemap)
