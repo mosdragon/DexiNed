@@ -9,12 +9,16 @@ xsoria@cvc.uab.es/xavysp@gmail.com
 
 import time
 import os
+
+from PIL import Image
 import numpy as np
+from imageio import imread, imwrite
 
 # %tensorflow 1.15
 import tensorflow as tf
 from tensorflow.compat.v1 import ConfigProto
 from tensorflow.compat.v1 import InteractiveSession
+import cv2
 
 slim = tf.contrib.slim
 
@@ -27,16 +31,19 @@ class DexinedModel():
 
     def __init__(self, checkpoint_path=PRETRAINED_MODEL_PATH):
 
-        self.img_height = TARGET_H
-        self.img_width = TARGET_W
-        self.n_channels = N_CHANNELS
+        self.img_height = self.TARGET_H
+        self.img_width = self.TARGET_W
+        self.n_channels = self.N_CHANNELS
+
+        print(f"DEBUG: {self.img_height, self.img_width, self.n_channels}" +
+            f"{checkpoint_path}")
 
         # Assume we're in testing mode
         self.images = tf.placeholder(tf.float32,
             [None, self.img_height, self.img_width, self.n_channels])
 
         self.edgemaps = tf.placeholder(tf.float32,
-            [None, self.image_height, self.image_width, 1])
+            [None, self.img_height, self.img_width, 1])
 
         # Build the network architecture
         self.define_model()
@@ -68,11 +75,11 @@ class DexinedModel():
         G = np.mean(img[:, :, 1])
         B = np.mean(img[:, :, 2])
         img -= np.array([R, G, B])
-        img = cv.resize(img, dsize=(self.img_width, self.img_height))
+        img = cv2.resize(img, dsize=(self.img_width, self.img_height))
 
         self.setup_testing()
 
-        edge_maps = session.run(self.predictions, feed_dict={self.images: [img]})
+        edge_maps = self.session.run(self.predictions, feed_dict={self.images: [img]})
         single_edge_map = self.get_single_edgemap(img, edge_maps, threshold=0.0)
         return single_edge_map
 
@@ -95,7 +102,7 @@ class DexinedModel():
         edgemap_avg = np.tile(edgemap_avg, [1, 1, 3])
 
         edgemap_fused = Image.fromarray(np.uint8(edgemap_fused))
-        edgemap_avg = Image.fromarray(np.uint8(em_avg))
+        edgemap_avg = Image.fromarray(np.uint8(edgemap_avg))
 
         img_size = img.shape[:2]
         edgemap_fused = edgemap_fused.resize(img_size)
@@ -544,17 +551,6 @@ class DexinedModel():
                                        dtype=tf.float32)
 
         return tf.get_variable(name=name, initializer=init, shape=weights.shape)
-
-    def setup_testing(self):
-        """
-            Apply sigmoid non-linearity to side layer ouputs + fuse layer outputs for predictions
-        """
-        self.predictions = []
-
-        for idx, b in enumerate(self.outputs):
-            output = tf.nn.sigmoid(b, name='output_{}'.format(idx))
-            self.predictions.append(output)
-
 
 
 if __name__ == "__main__":
