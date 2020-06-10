@@ -65,8 +65,8 @@ class DexinedModel(object):
     """Class to load DexiNed model and run inference."""
 
     INPUT_TENSOR_NAME = 'ImageTensor:0'
-    OUTPUT_TENSOR_NAME = 'output_6:0'
-    INPUT_SIZE = 512
+    OUTPUT_TENSOR_NAME = ['output_0:0', 'output_1:0', 'output_2:0',
+        'output_3:0', 'output_4:0', 'output_5:0', 'output_6:0']
     FROZEN_GRAPH_NAME = 'frozen_graph.pbtxt'
 
     TARGET_H = TARGET_W = 512
@@ -113,7 +113,7 @@ class DexinedModel(object):
             :img: - an RGB image as a numpy array
 
         Returns:
-            :final_edgemap: - a 1-channel image, of the same height/width
+            :avg_edgemap: - a 1-channel image, of the same height/width
                 as the input img.
         """
 
@@ -125,7 +125,6 @@ class DexinedModel(object):
         # later.
         src_h, src_w, _ = img.shape
         src_dimensions = (src_h, src_w)
-
 
         # Remove mean RGB value from image.
         R = np.mean(img[:, :, 0])
@@ -144,22 +143,26 @@ class DexinedModel(object):
         img_batched = img.reshape((1, self.TARGET_H, self.TARGET_W,
             self.N_CHANNELS))
 
-        # Feed into the network to get back the edgemaps
-        # edge_maps = self.session.run(self.predictions, feed_dict={self.images: img_batched})
-
-        # Average the edgemaps and resize into the original image dimensions
-        # final_edgemap = self.get_single_edgemap(edge_maps, src_dimensions)
-
-        batch_edge_map = self.sess.run(
+        # This model produces 7 edge maps total, each of shape (1 x H x W x 1)
+        batch_edge_maps = self.sess.run(
             self.OUTPUT_TENSOR_NAME,
             feed_dict={self.INPUT_TENSOR_NAME: img_batched})
 
-        edge_map = batch_edge_map[0]
+        # Here we squeeze each map, so they each have dimensions (H x W)
+        edge_maps = [em.squeeze() for em in batch_edge_maps]
 
-        # TODO: Resize to original dims
-        final_edgemap = skimage.transform.resize(edge_map, src_dimensions)
+        # We average these edge maps together to obtain the best edge detection
+        # results. This is the final edge map, with dimensions (H x W)
+        avg_edgemap = np.mean(np.array(edge_maps), axis=0)
 
-        return np.asarray(final_edgemap)
+        # Resize the edgemap to the same size as the input image.
+        avg_edgemap = skimage.transform.resize(avg_edgemap, src_dimensions)
+
+        # Finally, invert the colors so edges are 0, non-edges are 255, with
+        # all values in between being weak/strong edges.
+        avg_edgemap = (255.0 * (1.0 - avg_edgemap)).astype(np.uint8)
+
+        return avg_edgemap
 
 ###############################################################################
 
@@ -167,12 +170,30 @@ debug(f"Loading model {DEXINED_MODEL_PATH}")
 model = DexinedModel(DEXINED_MODEL_PATH)
 debug(f"Finished loading model.")
 
+
+def get_dexined_edges(img):
+    """
+    Produce the output edgemap.
+
+    Args:
+        :img: - an RGB image as a numpy array
+
+    Returns:
+        :avg_edgemap: - a 1-channel image, of the same height/width
+            as the input img.
+    """
+    return model.run(img)
+
+
 if __name__ == "__main__":
-    img_uri = "data/stairs.jpg"
+    img_uri = "data/start.png"
     # Read image as RGB image.
     img = imread(img_uri, pilmode="RGB")
     img = np.asarray(img)
 
-    final_edgemap = model.run(img)
+    debug("Start")
+    em = get_dexined_edges(img)
+    debug("End")
+
     imwrite("g0.png", img)
-    imwrite("g1.png", final_edgemap)
+    imwrite("g1.png", em)

@@ -41,7 +41,8 @@ class DexinedNetwork():
 
     # PRETRAINED_MODEL_PATH = "/home/mxs8x15/code/new_hed/DexiNed/checkpoints/DXN_BIPED/train_2/DXN-149999"
     # PRETRAINED_MODEL_PATH = "/home/mxs8x15/code/new_hed/DexiNed/checkpoints/DXN_BIPED/train_1/DXN-149736"
-    PRETRAINED_MODEL_PATH = "checkpoints/DXN_BIPED/train_2/DXN-149999"
+    PRETRAINED_MODEL_PATH = "checkpoints/DXN_BIPED/train_1/DXN-149736"
+    # PRETRAINED_MODEL_PATH = "checkpoints/DXN_BIPED/train_2/DXN-149999"
     TARGET_H = TARGET_W = 512
     N_CHANNELS = 3
 
