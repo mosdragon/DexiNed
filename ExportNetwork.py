@@ -37,7 +37,7 @@ import cv2
 
 slim = tf.contrib.slim
 
-class DexinedModel():
+class DexinedNetwork():
 
     # PRETRAINED_MODEL_PATH = "/home/mxs8x15/code/new_hed/DexiNed/checkpoints/DXN_BIPED/train_2/DXN-149999"
     # PRETRAINED_MODEL_PATH = "/home/mxs8x15/code/new_hed/DexiNed/checkpoints/DXN_BIPED/train_1/DXN-149736"
@@ -57,7 +57,8 @@ class DexinedModel():
 
         # Assume we're in testing mode
         self.images = tf.compat.v1.placeholder(tf.float32,
-            [None, self.img_height, self.img_width, self.n_channels])
+            [None, self.img_height, self.img_width, self.n_channels],
+            name="ImageTensor")
 
         self.edgemaps = tf.compat.v1.placeholder(tf.float32,
             [None, self.img_height, self.img_width, 1])
@@ -592,11 +593,10 @@ if __name__ == "__main__":
     config.gpu_options.allow_growth = True
     # session = InteractiveSession(config=config)
 
-
     # with tf.get_default_session():
     with tf.Session(config=config) as session:
         # Load the Dexined Model.
-        model = DexinedModel(session)
+        model = DexinedNetwork(session)
         # Produce the edgemap from the model.
         final_edgemap = model.predict(img)
 
@@ -610,5 +610,5 @@ if __name__ == "__main__":
             session.graph_def, output_node_names)
 
         # Save the frozen graph
-        with open('save/frozen_graph.pb', 'wb') as wf:
+        with open('checkpoints/frozen_graph.pbtxt', 'wb') as wf:
             wf.write(frozen_graph_def.SerializeToString())
