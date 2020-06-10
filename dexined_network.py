@@ -1,10 +1,22 @@
-""" DexiNed architecture description
+"""
+Generate the frozen graph file for Dexined. This graph file contains the
+network and it's weights, so this single file is what we'll use to run
+the DexiNed edge detector model as well as export to Mobile.
 
+TODO: You must download the following resources to ./checkpoints/:
+    gs://ds-osama/postprocess/dexined/DXN_BIPED/train_1
+    gs://ds-osama/postprocess/dexined/DXN_BIPED/train_2
 
-Created by: Xavier Soria Poma
-Modified from: https://github.com/machrisaa/tensorflow-vgg
-Autonomous University of Barcelona-Computer Vision Center
-xsoria@cvc.uab.es/xavysp@gmail.com
+This command can be used to download them both:
+
+gsutil -m cp -r \
+gs://ds-osama/postprocess/dexined/DXN_BIPED/ \
+./checkpoints
+
+When you run this script, you fill find the frozen graph file store in:
+    ./checkpoints/dexined_frozen_graph.pbtxt
+
+To use this frozen graph, you'll need to look at dexined_edges.py.
 """
 
 import os
@@ -15,8 +27,6 @@ warnings.simplefilter("ignore")
 
 # Set Tensorflow Logs to Error
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
-
-
 
 import time
 from PIL import Image
@@ -30,7 +40,6 @@ from tensorflow.compat.v1 import ConfigProto
 from tensorflow.compat.v1 import InteractiveSession
 from tensorflow.compat.v1.graph_util import convert_variables_to_constants
 
-
 import skimage.transform
 import cv2
 
@@ -38,11 +47,21 @@ import cv2
 slim = tf.contrib.slim
 
 class DexinedNetwork():
+    """
+    This re-builds the network architecture that the pre-trained models
+    are trained on.
 
-    # PRETRAINED_MODEL_PATH = "/home/mxs8x15/code/new_hed/DexiNed/checkpoints/DXN_BIPED/train_2/DXN-149999"
-    # PRETRAINED_MODEL_PATH = "/home/mxs8x15/code/new_hed/DexiNed/checkpoints/DXN_BIPED/train_1/DXN-149736"
+    TODO: Pick either train_1 or train_2 as the model you want by commenting
+    one of the PRETRAINED_MODEL_PATH lines.
+        - train_1 is the perceptually better model, and this model's results
+            were showcased at the WACV 2020 conference.
+        - train_2 is quantitatively better, but it's fine-tuned on a separate
+            dataset.
+    """
+    # TODO: Leave only one of these two uncommented.
     PRETRAINED_MODEL_PATH = "checkpoints/DXN_BIPED/train_1/DXN-149736"
     # PRETRAINED_MODEL_PATH = "checkpoints/DXN_BIPED/train_2/DXN-149999"
+
     TARGET_H = TARGET_W = 512
     N_CHANNELS = 3
 
@@ -53,20 +72,10 @@ class DexinedNetwork():
         self.img_width = self.TARGET_W
         self.n_channels = self.N_CHANNELS
 
-        print(f"DEBUG: {self.img_height, self.img_width, self.n_channels}" +
-            f"{checkpoint_path}")
-
         # Assume we're in testing mode
         self.images = tf.compat.v1.placeholder(tf.float32,
             [None, self.img_height, self.img_width, self.n_channels],
             name="ImageTensor")
-
-        self.edgemaps = tf.compat.v1.placeholder(tf.float32,
-            [None, self.img_height, self.img_width, 1])
-
-        # Log time to load model.
-        start_time = time.time()
-
 
         # Build the network architecture
         self.define_model()
@@ -79,67 +88,6 @@ class DexinedNetwork():
         # One-time setup
         self.setup_testing()
 
-        print("Time to load model: {:.2f}s".format(time.time() - start_time))
-
-
-    def predict(self, img):
-        """
-        Produce the output edgemap.
-
-        Args:
-            :img: - an RGB image as a numpy array
-
-        Returns:
-            :final_edgemap: - a 1-channel image, of the same height/width
-                as the input img.
-        """
-
-        # If the image is not a float32 image, convert it.
-        if img.dtype == np.uint8:
-            img = img.astype(np.float32) / 255.0
-
-        # Get dimensions of the original image, store it to resize the edgemaps
-        # later.
-        orig_h, orig_w, _ = img.shape
-        img_dimensions = (orig_h, orig_w)
-
-        # Remove mean RGB value from image.
-        R = np.mean(img[:, :, 0])
-        G = np.mean(img[:, :, 1])
-        B = np.mean(img[:, :, 2])
-
-        img[:, :, 0] -= R
-        img[:, :, 1] -= G
-        img[:, :, 2] -= B
-
-        # Resize image so it can be passed through the network.
-        img = skimage.transform.resize(img, (self.img_width, self.img_height))
-
-        # Turn this single image into a batch, the shape will be (1 x H x W x 3)
-        img_batched = img.reshape((1, self.img_height, self.img_width,
-            self.n_channels))
-
-        # Feed into the network to get back the edgemaps
-        edge_maps = self.session.run(self.predictions, feed_dict={self.images: img_batched})
-
-        # Average the edgemaps and resize into the original image dimensions
-        final_edgemap = self.get_single_edgemap(edge_maps, img_dimensions)
-
-        return final_edgemap
-
-
-    def get_single_edgemap(self, edge_maps, img_dimensions):
-        edge_maps = [e[0] for e in edge_maps]
-        edgemap_avg = np.mean(np.array(edge_maps), axis=0)
-        # Invert colors so edges are 0, spaces are 255
-        edgemap_avg = (255.0 * (1.0 - edgemap_avg)).astype(np.uint8)
-
-        # Resize this edgemap to the dimensions of the original image.
-        final_edgemap = skimage.transform.resize(edgemap_avg, img_dimensions)
-        print(f"Before: {edgemap_avg.shape}    After: {final_edgemap.shape}")
-        return final_edgemap
-
-
     def setup_testing(self):
         """
             Apply sigmoid non-linearity to side layer ouputs + fuse layer outputs for predictions
@@ -149,9 +97,6 @@ class DexinedNetwork():
         for idx, b in enumerate(self.outputs):
             output = tf.nn.sigmoid(b, name='output_{}'.format(idx))
             self.predictions.append(output)
-
-
-        print(f"\n\nOutputs: {len(self.predictions)} -- {self.predictions}\n\n")
 
 
     def define_model(self):
@@ -583,33 +528,31 @@ class DexinedNetwork():
         return tf.get_variable(name=name, initializer=init, shape=weights.shape)
 
 
-if __name__ == "__main__":
-    img_uri = "data/stairs.jpg"
-    # Read image as RGB image.
-    img = imread(img_uri, pilmode="RGB")
-    img = np.asarray(img)
-
+def export():
     # Session for TensorFlow version 1.
     config = ConfigProto()
     config.gpu_options.allow_growth = True
-    # session = InteractiveSession(config=config)
 
     # with tf.get_default_session():
-    with tf.Session(config=config) as session:
+    with tf.compat.v1.Session(config=config) as session:
         # Load the Dexined Model.
         model = DexinedNetwork(session)
-        # Produce the edgemap from the model.
-        final_edgemap = model.predict(img)
 
-        imwrite("res0.png", img)
-        imwrite("res1.png", final_edgemap)
+        # Get the node names from the model.
+        tensor_names = [node.name for node in model.predictions]
 
-        # Export the model
-        output_node_names = ['output_0', 'output_1', 'output_2', 'output_3', 'output_4', 'output_5', 'output_6']
+        # Remove the ":0" from each tensor name to get the node name.
+        output_node_names = [name.split(":")[0] for name in tensor_names]
+        print(f"Output Node Names: {output_node_names}")
 
+        # Export the model as a frozen graph.
         frozen_graph_def = convert_variables_to_constants(session,
             session.graph_def, output_node_names)
 
-        # Save the frozen graph
-        with open('checkpoints/frozen_graph.pbtxt', 'wb') as wf:
+        # Save the frozen graph.
+        with open('./checkpoints/dexined_frozen_graph.pbtxt', 'wb') as wf:
             wf.write(frozen_graph_def.SerializeToString())
+
+
+if __name__ == "__main__":
+    export()
