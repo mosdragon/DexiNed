@@ -3,20 +3,22 @@ Load in the DexiNed edge detector model from the frozen graph file and use
 it to predict edges on abitrary images.
 
 TODO: You must have the DexiNed frozen graph file saved in:
-    ./checkpoints/dexined_frozen_graph.pbtxt
+    ./checkpoints/dexined_frozen_graph_{v1,v2}.pbtxt
 
 You can either:
-(a) run `python ExportNetwork.py` to generate it.
+(a) run `python ExportNetwork.py` to generate the frozen graphs.
 
-(b) Download it from:
-gs://ds-osama/postprocess/dexined/dexined_frozen_graph.pbtxt
+(b) Download them from:
+gs://ds-osama/postprocess/dexined/dexined_frozen_graph_{v1,v2}.pbtxt
 
 The main() function here just serves as a test.
 """
 
 ###############################################################################
-# TODO: Change to your own path to the tensorflow models repo
-DEXINED_MODEL_PATH = "checkpoints/dexined_frozen_inference_graph.pbtxt"
+# TODO: Choose one of the two frozen graph paths, comment the other. Look at
+# checkpoints/README.md if you're unsure which one you want to use.
+DEXINED_MODEL_PATH = "./checkpoints/dexined_frozen_graph_v1.pbtxt"
+# DEXINED_MODEL_PATH = "./checkpoints/dexined_frozen_graph_v2.pbtxt"
 
 ###############################################################################
 
@@ -50,9 +52,8 @@ from tensorflow.compat.v1 import InteractiveSession
 ###############################################################################
 
 # These are to enable Model to run on GPU
-# config = ConfigProto()
-# config.gpu_options.allow_growth = True
-# session = InteractiveSession(config=config)
+config = ConfigProto()
+config.gpu_options.allow_growth = True
 
 # Ignore additional warnings and logs from TensorFlow.
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
@@ -78,7 +79,7 @@ class DexinedModel(object):
     # This is the name of the frozen graph file. Even if this file is in a tar
     # or zip archive, we want to make sure to read only this file to build the
     # TensorFlow graph.
-    FROZEN_GRAPH_NAME = 'dexined_frozen_graph.pbtxt'
+    FROZEN_GRAPH_NAME = 'dexined_frozen_graph'
 
     # Ensure these are the same as from DexinedNetwork.
     TARGET_H = TARGET_W = 512
@@ -120,7 +121,7 @@ class DexinedModel(object):
         with self.graph.as_default():
             tf.import_graph_def(graph_def, name='')
 
-        self.session = tf.compat.v1.Session(graph=self.graph)
+        self.session = tf.compat.v1.Session(graph=self.graph, config=config)
 
 
     def run(self, img):

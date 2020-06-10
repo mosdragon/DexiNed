@@ -13,26 +13,36 @@ gsutil -m cp -r \
 gs://ds-osama/postprocess/dexined/DXN_BIPED/ \
 ./checkpoints
 
-When you run this script, you fill find the frozen graph file store in:
-    ./checkpoints/dexined_frozen_graph.pbtxt
+- train_1 is the perceptually better model, and this model's results
+    were showcased at the WACV 2020 conference.
+- train_2 is quantitatively better, but it's fine-tuned on a separate
+    dataset.
 
-To use this frozen graph, you'll need to look at dexined_edges.py.
+When you run this script, you fill find the frozen graph files stored in:
+    ./checkpoints/dexined_frozen_graph_v1.pbtxt
+    ./checkpoints/dexined_frozen_graph_v2.pbtxt
+
+To use this frozen graph file, you'll need to look at dexined_edges.py.
 """
-
 import os
 import warnings
 
 # Ignore warnings
+warnings.filterwarnings("ignore")
 warnings.simplefilter("ignore")
 
-# Set Tensorflow Logs to Error
+# Set Tensorflow log level to error.
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
+
+# Disable GPU usage, it doesn't help here with exporting.
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 import time
 from PIL import Image
 
 import numpy as np
 from imageio import imread, imwrite
+import skimage.transform
 
 # %tensorflow 1.15
 import tensorflow as tf
@@ -40,32 +50,22 @@ from tensorflow.compat.v1 import ConfigProto
 from tensorflow.compat.v1 import InteractiveSession
 from tensorflow.compat.v1.graph_util import convert_variables_to_constants
 
-import skimage.transform
-import cv2
-
-
 slim = tf.contrib.slim
+
+
+V1_PRETRAINED_MODEL_PATH = "checkpoints/DXN_BIPED/train_1/DXN-149736"
+V2_PRETRAINED_MODEL_PATH = "checkpoints/DXN_BIPED/train_2/DXN-149999"
+
 
 class DexinedNetwork():
     """
     This re-builds the network architecture that the pre-trained models
     are trained on.
-
-    TODO: Pick either train_1 or train_2 as the model you want by commenting
-    one of the PRETRAINED_MODEL_PATH lines.
-        - train_1 is the perceptually better model, and this model's results
-            were showcased at the WACV 2020 conference.
-        - train_2 is quantitatively better, but it's fine-tuned on a separate
-            dataset.
     """
-    # TODO: Leave only one of these two uncommented.
-    PRETRAINED_MODEL_PATH = "checkpoints/DXN_BIPED/train_1/DXN-149736"
-    # PRETRAINED_MODEL_PATH = "checkpoints/DXN_BIPED/train_2/DXN-149999"
-
     TARGET_H = TARGET_W = 512
     N_CHANNELS = 3
 
-    def __init__(self, session, checkpoint_path=PRETRAINED_MODEL_PATH):
+    def __init__(self, session, checkpoint_path=V1_PRETRAINED_MODEL_PATH):
 
         self.session = session
         self.img_height = self.TARGET_H
@@ -529,15 +529,14 @@ class DexinedNetwork():
 
 
 def export():
-    # Session for TensorFlow version 1.
+    # Session for TensorFlow 1.1x.
     config = ConfigProto()
     config.gpu_options.allow_growth = True
 
-    # with tf.get_default_session():
+    # Export for V1
     with tf.compat.v1.Session(config=config) as session:
         # Load the Dexined Model.
-        model = DexinedNetwork(session)
-
+        model = DexinedNetwork(session, checkpoint_path=V1_PRETRAINED_MODEL_PATH)
         # Get the node names from the model.
         tensor_names = [node.name for node in model.predictions]
 
@@ -549,8 +548,33 @@ def export():
         frozen_graph_def = convert_variables_to_constants(session,
             session.graph_def, output_node_names)
 
-        # Save the frozen graph.
-        with open('./checkpoints/dexined_frozen_graph.pbtxt', 'wb') as wf:
+        # Save the frozen graph version v1.
+        with open('./checkpoints/dexined_frozen_graph_v1.pbtxt', 'wb') as wf:
+            wf.write(frozen_graph_def.SerializeToString())
+
+
+    tf.compat.v1.reset_default_graph()
+    # Session for TensorFlow 1.1x.
+    config = ConfigProto()
+    config.gpu_options.allow_growth = True
+
+    # Export for V2
+    with tf.compat.v1.Session(config=config) as session:
+        # Load the Dexined Model.
+        model = DexinedNetwork(session, checkpoint_path=V2_PRETRAINED_MODEL_PATH)
+        # Get the node names from the model.
+        tensor_names = [node.name for node in model.predictions]
+
+        # Remove the ":0" from each tensor name to get the node name.
+        output_node_names = [name.split(":")[0] for name in tensor_names]
+        print(f"Output Node Names: {output_node_names}")
+
+        # Export the model as a frozen graph.
+        frozen_graph_def = convert_variables_to_constants(session,
+                session.graph_def, output_node_names)
+
+        # Save the frozen graph version v2.
+        with open('./checkpoints/dexined_frozen_graph_v2.pbtxt', 'wb') as wf:
             wf.write(frozen_graph_def.SerializeToString())
 
 
