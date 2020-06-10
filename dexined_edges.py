@@ -38,9 +38,6 @@ import os
 import tarfile
 
 import numpy as np
-import matplotlib
-
-import skimage
 import skimage.transform
 from imageio import imread, imwrite
 
@@ -205,14 +202,16 @@ def get_dexined_edges(img):
 
 
 def main():
-    img_uri = "data/start.png"
+    img_uri = "example/living_room.png"
     # Read image as RGB image.
     img = imread(img_uri, pilmode="RGB")
     img = np.asarray(img)
 
-    em = get_dexined_edges(img)
-    imwrite("g0.png", img)
-    imwrite("g1.png", em)
+    edgemap = get_dexined_edges(img)
+
+    dest_uri = img_uri.replace(".png", "_edges.png")
+    print(f"Saving output edgemap to {dest_uri}")
+    imwrite(dest_uri, edgemap)
 
 if __name__ == "__main__":
     main()

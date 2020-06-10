@@ -37,9 +37,6 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
 # Disable GPU usage, it doesn't help here with exporting.
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
-import time
-from PIL import Image
-
 import numpy as np
 from imageio import imread, imwrite
 import skimage.transform
@@ -52,10 +49,9 @@ from tensorflow.compat.v1.graph_util import convert_variables_to_constants
 
 slim = tf.contrib.slim
 
-
+# TODO: Ensure these are stored locally.
 V1_PRETRAINED_MODEL_PATH = "checkpoints/DXN_BIPED/train_1/DXN-149736"
 V2_PRETRAINED_MODEL_PATH = "checkpoints/DXN_BIPED/train_2/DXN-149999"
-
 
 class DexinedNetwork():
     """
