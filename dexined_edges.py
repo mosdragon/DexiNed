@@ -66,8 +66,7 @@ class DexinedModel(object):
 
     # These are the names from output_node_names, but with a ":0" at the end
     # to indicate we want the first tensor of that name.
-    OUTPUT_TENSOR_NAME = ['output_0:0', 'output_1:0', 'output_2:0',
-        'output_3:0', 'output_4:0', 'output_5:0', 'output_6:0']
+    OUTPUT_TENSOR_NAME = 'avg_edgemap:0'
 
     # This is the name of the frozen graph file. Even if this file is in a tar
     # or zip archive, we want to make sure to read only this file to build the
@@ -155,26 +154,22 @@ class DexinedModel(object):
         img_batched = img.reshape((1, self.TARGET_H, self.TARGET_W,
             self.N_CHANNELS))
 
-        # This model produces 7 edge maps total, each of shape (1 x H x W x 1)
-        batch_edge_maps = self.session.run(
+        # This model outputs a single tensor of shape (1 x H x W x 1)
+        batch_avg_edgemap = self.session.run(
             self.OUTPUT_TENSOR_NAME,
             feed_dict={self.INPUT_TENSOR_NAME: img_batched})
 
-        # Here we squeeze each map, so they each have dimensions (H x W)
-        edge_maps = [em.squeeze() for em in batch_edge_maps]
-
-        # We average these edge maps together to obtain the best edge detection
-        # results. This is the final edge map, with dimensions (H x W)
-        avg_edgemap = np.mean(np.array(edge_maps), axis=0)
+        # Here we squeeze the edgemap into shape (H x W)
+        avg_edgemap = batch_avg_edgemap.squeeze()
 
         # Resize the edgemap to the same size as the input image.
         avg_edgemap = skimage.transform.resize(avg_edgemap, src_dimensions)
 
         # Finally, invert the colors so edges are 0, non-edges are 255, with
         # all values in between being weak/strong edges.
-        avg_edgemap = (255.0 * (1.0 - avg_edgemap)).astype(np.uint8)
+        final_edgemap = (255.0 * (1.0 - avg_edgemap)).astype(np.uint8)
 
-        return avg_edgemap
+        return final_edgemap
 
 ###############################################################################
 
@@ -195,3 +190,16 @@ def get_dexined_edges(img):
     """
     return model.run(img)
 
+
+if __name__ == "__main__":
+    import numpy as np
+    from imageio import imread, imwrite
+
+    # Read in an RGB image as a numpy array.
+    img_uri = "figures/living_room.jpg"
+    img = imread(img_uri, pilmode="RGB")
+    img = np.asarray(img)
+
+    # Get the edgemap, which is a grayscale uint8 numpy array.
+    edgemap = get_dexined_edges(img)
+    imwrite("figures/living_room_edges.png", edgemap)
