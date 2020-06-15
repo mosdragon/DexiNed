@@ -84,6 +84,7 @@ class DexinedNetwork():
         # One-time setup
         self.setup_testing()
 
+
     def setup_testing(self):
         """
             Apply sigmoid non-linearity to side layer ouputs + fuse layer outputs for predictions
@@ -93,6 +94,9 @@ class DexinedNetwork():
         for idx, b in enumerate(self.outputs):
             output = tf.nn.sigmoid(b, name='output_{}'.format(idx))
             self.predictions.append(output)
+
+        stacks = tf.compat.v1.stack(self.predictions)
+        self.avg_edgemap = tf.compat.v1.reduce_mean(stacks, axis=0, name="avg_edgemap")
 
 
     def define_model(self):
@@ -323,7 +327,7 @@ class DexinedNetwork():
             self.side_outputs = [self.output1, self.output2, self.output3,
                                  self.output4, self.output5,self.output6]
 
-            self.fuse = tf.layers.conv2d(tf.concat(self.side_outputs, axis=3),filters=1,
+            self.fuse = tf.layers.conv2d(tf.concat(self.side_outputs, 3),filters=1,
                                         kernel_size=[1,1], name='fuse_1',strides=(1,1),padding='same',
                                         kernel_initializer=tf.constant_initializer(1 / len(self.side_outputs)))
             self.outputs = self.side_outputs + [self.fuse]
@@ -533,21 +537,23 @@ def export():
     with tf.compat.v1.Session(config=config) as session:
         # Load the Dexined Model.
         model = DexinedNetwork(session, checkpoint_path=V1_PRETRAINED_MODEL_PATH)
-        # Get the node names from the model.
-        tensor_names = [node.name for node in model.predictions]
+        graph_filepath = './checkpoints/dexined_frozen_graph_v1.pbtxt'
 
-        # Remove the ":0" from each tensor name to get the node name.
-        output_node_names = [name.split(":")[0] for name in tensor_names]
-        print(f"Output Node Names: {output_node_names}")
+        # The output tensor is the avg_egdemap tensor from the model.
+        tensor_name = model.avg_edgemap.name
+        # Remove the ":0" from the tensor name to get the node name, make it a list.
+        tensor_name = [tensor_name.split(":")[0]]
+        print(f"Output Node Name: {tensor_name}")
 
         # Export the model as a frozen graph.
         frozen_graph_def = convert_variables_to_constants(session,
-            session.graph_def, output_node_names)
+            session.graph_def, tensor_name)
 
         # Save the frozen graph version v1.
-        with open('./checkpoints/dexined_frozen_graph_v1.pbtxt', 'wb') as wf:
+        with open(graph_filepath, 'wb') as wf:
             wf.write(frozen_graph_def.SerializeToString())
 
+        print(f"Saved model to {graph_filepath}")
 
     tf.compat.v1.reset_default_graph()
     # Session for TensorFlow 1.1x.
@@ -558,20 +564,23 @@ def export():
     with tf.compat.v1.Session(config=config) as session:
         # Load the Dexined Model.
         model = DexinedNetwork(session, checkpoint_path=V2_PRETRAINED_MODEL_PATH)
-        # Get the node names from the model.
-        tensor_names = [node.name for node in model.predictions]
+        graph_filepath = './checkpoints/dexined_frozen_graph_v2.pbtxt'
 
-        # Remove the ":0" from each tensor name to get the node name.
-        output_node_names = [name.split(":")[0] for name in tensor_names]
-        print(f"Output Node Names: {output_node_names}")
+        # The output tensor is the avg_egdemap tensor from the model.
+        tensor_name = model.avg_edgemap.name
+        # Remove the ":0" from the tensor name to get the node name, make it a list.
+        tensor_name = [tensor_name.split(":")[0]]
+        print(f"Output Node Name: {tensor_name}")
 
         # Export the model as a frozen graph.
         frozen_graph_def = convert_variables_to_constants(session,
-                session.graph_def, output_node_names)
+                session.graph_def, tensor_name)
 
-        # Save the frozen graph version v2.
-        with open('./checkpoints/dexined_frozen_graph_v2.pbtxt', 'wb') as wf:
+        # Save the frozen graph version v1.
+        with open(graph_filepath, 'wb') as wf:
             wf.write(frozen_graph_def.SerializeToString())
+
+        print(f"Saved model to {graph_filepath}")
 
 
 if __name__ == "__main__":

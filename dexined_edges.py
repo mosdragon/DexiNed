@@ -5,20 +5,16 @@ it to predict edges on abitrary images.
 TODO: You must have the DexiNed frozen graph file saved in:
     ./checkpoints/dexined_frozen_graph_{v1,v2}.pbtxt
 
-You can either:
-(a) run `python ExportNetwork.py` to generate the frozen graphs.
-
-(b) Download them from:
+Download them from:
 gs://ds-osama/postprocess/dexined/dexined_frozen_graph_{v1,v2}.pbtxt
-
-The main() function here just serves as a test.
 """
 
 ###############################################################################
 # TODO: Choose one of the two frozen graph paths, comment the other. Look at
-# checkpoints/README.md if you're unsure which one you want to use.
-DEXINED_MODEL_PATH = "./checkpoints/dexined_frozen_graph_v1.pbtxt"
-# DEXINED_MODEL_PATH = "./checkpoints/dexined_frozen_graph_v2.pbtxt"
+# checkpoints/README.md if you're unsure which one you want to use. See
+# <PROJECT-ROOT>/README.md to see where to retrieve these files.
+# DEXINED_MODEL_PATH = "./checkpoints/dexined_frozen_graph_v1.pbtxt"
+DEXINED_MODEL_PATH = "./checkpoints/dexined_frozen_graph_v2.pbtxt"
 
 ###############################################################################
 
@@ -41,7 +37,7 @@ import numpy as np
 import skimage.transform
 from imageio import imread, imwrite
 
-# %tensorflow_version 1.x
+# %tensorflow_version 1.1x
 import tensorflow as tf
 from tensorflow.compat.v1 import ConfigProto
 from tensorflow.compat.v1 import InteractiveSession
@@ -182,9 +178,8 @@ class DexinedModel(object):
 
 ###############################################################################
 
-print(f"Loading model {DEXINED_MODEL_PATH}")
+# Load the model in.
 model = DexinedModel(DEXINED_MODEL_PATH)
-print(f"Finished loading model.")
 
 
 def get_dexined_edges(img):
@@ -200,18 +195,3 @@ def get_dexined_edges(img):
     """
     return model.run(img)
 
-
-def main():
-    img_uri = "example/living_room.png"
-    # Read image as RGB image.
-    img = imread(img_uri, pilmode="RGB")
-    img = np.asarray(img)
-
-    edgemap = get_dexined_edges(img)
-
-    dest_uri = img_uri.replace(".png", "_edges.png")
-    print(f"Saving output edgemap to {dest_uri}")
-    imwrite(dest_uri, edgemap)
-
-if __name__ == "__main__":
-    main()
