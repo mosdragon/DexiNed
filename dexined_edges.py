@@ -42,6 +42,9 @@ import tensorflow as tf
 from tensorflow.compat.v1 import ConfigProto
 from tensorflow.compat.v1 import InteractiveSession
 
+# Ignore deprecation warnings
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.FATAL)
+
 ###############################################################################
 
 # These are to enable Model to run on GPU
@@ -195,11 +198,15 @@ if __name__ == "__main__":
     import numpy as np
     from imageio import imread, imwrite
 
+    src_fpath = "figures/living_room.jpg"
+    dst_fpath = "figures/living_room_edges.png"
+
     # Read in an RGB image as a numpy array.
-    img_uri = "figures/living_room.jpg"
-    img = imread(img_uri, pilmode="RGB")
+    img = imread(src_fpath, pilmode="RGB")
     img = np.asarray(img)
 
     # Get the edgemap, which is a grayscale uint8 numpy array.
     edgemap = get_dexined_edges(img)
-    imwrite("figures/living_room_edges.png", edgemap)
+    imwrite(dst_fpath, edgemap)
+
+    print(f"Saved edgemap of {src_fpath} to {dst_fpath}")
