@@ -31,11 +31,11 @@ import warnings
 warnings.filterwarnings("ignore")
 warnings.simplefilter("ignore")
 
-# Set Tensorflow log level to error.
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
-
 # Disable GPU usage, it doesn't help here with exporting.
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+# Set Tensorflow log level to FATAL.
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '5'
 
 import numpy as np
 from imageio import imread, imwrite
@@ -44,9 +44,11 @@ import skimage.transform
 # %tensorflow 1.15
 import tensorflow as tf
 from tensorflow.compat.v1 import ConfigProto
-from tensorflow.compat.v1 import InteractiveSession
-from tensorflow.compat.v1.graph_util import convert_variables_to_constants
 
+# Ignore deprecation warnings
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.FATAL)
+
+# Aliases
 slim = tf.contrib.slim
 
 # TODO: Ensure these are stored locally.
@@ -110,7 +112,7 @@ class DexinedNetwork():
         with tf.compat.v1.variable_scope('Xpt') as sc:
 
             # ------------------------- Block1 ----------------------------------------
-            self.conv1_1 = tf.layers.conv2d(self.images, filters=32,
+            self.conv1_1 = tf.compat.v1.layers.conv2d(self.images, filters=32,
                 kernel_size=[3, 3], strides=(2, 2),
                 bias_initializer=tf.constant_initializer(0.0),
                 padding='SAME', name="conv1_1",
@@ -119,7 +121,7 @@ class DexinedNetwork():
             self.conv1_1 = slim.batch_norm(self.conv1_1)
             self.conv1_1 = tf.nn.relu(self.conv1_1)
 
-            self.conv1_2 = tf.layers.conv2d(self.conv1_1, filters=64,
+            self.conv1_2 = tf.compat.v1.layers.conv2d(self.conv1_1, filters=64,
                 kernel_size=[3,3], strides=(1,1),
                 bias_initializer=tf.constant_initializer(0.0),
                 padding='SAME', name="conv1_2",
@@ -134,7 +136,7 @@ class DexinedNetwork():
                 sub_pixel=use_subpixel,
                 kernel_init=weight_init)  # bx400x400x1
 
-            self.rconv1 = tf.layers.conv2d(self.conv1_2,
+            self.rconv1 = tf.compat.v1.layers.conv2d(self.conv1_2,
                 filters=128, kernel_size=[1,1], activation=None,
                 strides=(2,2), bias_initializer=tf.constant_initializer(0.0),
                 padding='SAME', name="rconv1",
@@ -145,7 +147,7 @@ class DexinedNetwork():
             # ------------------------- Block2 ----------------------------------------
             self.block2_xcp = self.conv1_2
             for k in range(1):
-                self.block2_xcp = tf.layers.conv2d(
+                self.block2_xcp = tf.compat.v1.layers.conv2d(
                     self.block2_xcp, filters=128, kernel_size=[3, 3],
                     strides=(1, 1), padding='same',
                     name='conv_block2_{}'.format(k + 1),
@@ -154,7 +156,7 @@ class DexinedNetwork():
                 self.block2_xcp = slim.batch_norm(self.block2_xcp)
                 self.block2_xcp = tf.nn.relu(self.block2_xcp)
 
-                self.block2_xcp = tf.layers.conv2d(self.block2_xcp,
+                self.block2_xcp = tf.compat.v1.layers.conv2d(self.block2_xcp,
                     filters=128, kernel_size=[3, 3], strides=(1, 1),
                     padding='same', name='conv2_block2_{}'.format(k + 1),
                     kernel_initializer=weight_init) # bx200x200x128
@@ -170,7 +172,7 @@ class DexinedNetwork():
                 strides=(1,1),kernel_size=[1,1],sub_pixel=use_subpixel,
                 kernel_init=weight_init) # bx400x400x1
 
-            self.rconv2= tf.layers.conv2d(
+            self.rconv2= tf.compat.v1.layers.conv2d(
                 self.add2_1,filters=256, kernel_size=[1,1], activation=None,
                 kernel_initializer=weight_init, strides=(2,2),
                 bias_initializer=tf.constant_initializer(0.0),
@@ -180,7 +182,7 @@ class DexinedNetwork():
 
             # ------------------------- Block3 ----------------------------------------
             self.block3_xcp = self.add2_1
-            self.addb2_4b3 = tf.layers.conv2d(self.maxpool2_1, filters=256,
+            self.addb2_4b3 = tf.compat.v1.layers.conv2d(self.maxpool2_1, filters=256,
                 kernel_size=[1, 1], activation=None,
                 kernel_initializer=weight_init, strides=(1, 1),
                 bias_initializer=tf.constant_initializer(0.0),
@@ -191,14 +193,14 @@ class DexinedNetwork():
             for k in range(2):
 
                 self.block3_xcp=tf.nn.relu(self.block3_xcp)
-                self.block3_xcp = tf.layers.conv2d(
+                self.block3_xcp = tf.compat.v1.layers.conv2d(
                     self.block3_xcp, filters=256, kernel_size=[3, 3],
                     strides=(1, 1), padding='same', name='con1v_block3_{}'.format(k + 1),
                 kernel_initializer=weight_init) # bx100x100x256
                 self.block3_xcp = slim.batch_norm(self.block3_xcp)
                 self.block3_xcp = tf.nn.relu(self.block3_xcp)
 
-                self.block3_xcp = tf.layers.conv2d(
+                self.block3_xcp = tf.compat.v1.layers.conv2d(
                     self.block3_xcp, filters=256, kernel_size=[3, 3],
                     strides=(1,1),padding='same',name='conv2_block3_{}'.format(k+1),
                 kernel_initializer=weight_init)  # bx100x100x256
@@ -208,7 +210,7 @@ class DexinedNetwork():
             self.maxpool3_1 = slim.max_pool2d(self.block3_xcp, kernel_size=[3, 3],stride=2, padding='same',
                                              scope='maxpool3_1')  # bx50x50x256
             self.add3_1 = tf.add(self.maxpool3_1, self.rconv2) # with before skip left
-            self.rconv3 = tf.layers.conv2d(
+            self.rconv3 = tf.compat.v1.layers.conv2d(
                 self.add3_1, filters=512, kernel_size=[1, 1], activation=None,
                 kernel_initializer=weight_init, strides=(2, 2), bias_initializer=tf.constant_initializer(0.0),
                 padding='SAME', name="rconv3")  # bx25x25x512  # skip left
@@ -218,26 +220,26 @@ class DexinedNetwork():
                                            kernel_init=weight_init)   # bx400x400x1
 
             # ------------------------- Block4 ----------------------------------------
-            self.conv_b2b4 = tf.layers.conv2d(
+            self.conv_b2b4 = tf.compat.v1.layers.conv2d(
                 self.maxpool2_1, filters=256, kernel_size=[1, 1], activation=None,
                 kernel_initializer=weight_init, strides=(2, 2), bias_initializer=tf.constant_initializer(0.0),
                 padding='SAME', name="conv_b2b4")  # bx50x50x256 # skip right
             self.block4_xcp= self.add3_1
             self.addb2b3 = tf.add(self.conv_b2b4, self.maxpool3_1)# skip right
-            self.addb3_4b4 = tf.layers.conv2d(
+            self.addb3_4b4 = tf.compat.v1.layers.conv2d(
                 self.addb2b3, filters=512, kernel_size=[1, 1], activation=None,
                 kernel_initializer=weight_init, strides=(1, 1), bias_initializer=tf.constant_initializer(0.0),
                 padding='SAME', name="add3conv_4b4")  # bx50x50x512 # skip right
             self.addb3_4b4 = slim.batch_norm(self.addb3_4b4)# skip right
             for k in range(3):
                 self.block4_xcp= tf.nn.relu(self.block4_xcp)
-                self.block4_xcp = tf.layers.conv2d(
+                self.block4_xcp = tf.compat.v1.layers.conv2d(
                     self.block4_xcp, filters=512, kernel_size=[3, 3], strides=(1, 1),
                     padding='same', name='conv1_block4_{}'.format(k + 1), kernel_initializer=weight_init)  # bx50x50x512
                 self.block4_xcp = slim.batch_norm(self.block4_xcp)
                 self.block4_xcp = tf.nn.relu(self.block4_xcp)
 
-                self.block4_xcp = tf.layers.conv2d(
+                self.block4_xcp = tf.compat.v1.layers.conv2d(
                     self.block4_xcp, filters=512, kernel_size=[3, 3], strides=(1, 1),
                     padding='same', name='conv2_block4_{}'.format(k+1), kernel_initializer=weight_init) # bx50x50x512
                 self.block4_xcp = slim.batch_norm(self.block4_xcp)
@@ -246,7 +248,7 @@ class DexinedNetwork():
             self.maxpool4_1 = slim.max_pool2d(self.block4_xcp, kernel_size=[3, 3], stride=2, padding='same',
                                              scope='maxpool3_1')  # bx25x25x728, b=batch size
             self.add4_1 = tf.add(self.maxpool4_1, self.rconv3) # with skip left
-            self.rconv4 = tf.layers.conv2d(
+            self.rconv4 = tf.compat.v1.layers.conv2d(
                 self.add4_1, filters=512, kernel_size=[1, 1], activation=None,
                 kernel_initializer=weight_init, strides=(1, 1), bias_initializer=tf.constant_initializer(0.0),
                 padding='SAME', name="rconv4")  # bx25x25x512  # skip leff
@@ -257,28 +259,28 @@ class DexinedNetwork():
                                            kernel_init=weight_init)  # bx400x400x1
 
             # ------------------------- Block5 ----------------------------------------
-            self.convb3_2ab4 = tf.layers.conv2d(
+            self.convb3_2ab4 = tf.compat.v1.layers.conv2d(
                 self.conv_b2b4, filters=512, kernel_size=[1, 1], activation=None,
                 kernel_initializer=weight_init, strides=(2, 2), bias_initializer=tf.constant_initializer(0.0),
                             padding='SAME', name="conv_b2b5")  # bx25x25x512  # skip right
 
             self.block5_xcp=self.add4_1
             self.addb2b5 =  tf.add(self.convb3_2ab4,self.maxpool4_1)  # skip right
-            self.addb2b5 = tf.layers.conv2d(
+            self.addb2b5 = tf.compat.v1.layers.conv2d(
                 self.addb2b5, filters=512, kernel_size=[1, 1], activation=None,
                 kernel_initializer=weight_init, strides=(1, 1), bias_initializer=tf.constant_initializer(0.0),
                 padding='SAME', name="addb2b5")  # bx25x25x512# skip right
             self.addb2b5 = slim.batch_norm(self.addb2b5)# skip right
             for k in range(3):
                 self.block5_xcp=tf.nn.relu(self.block5_xcp)
-                self.block5_xcp= tf.layers.conv2d(
+                self.block5_xcp= tf.compat.v1.layers.conv2d(
                     self.block5_xcp, filters=512, kernel_size=[3, 3],
                     strides=(1, 1),padding='SAME', name="conv1_block5{}".format(k+1),
                 kernel_initializer=weight_init)  # bx25x25x512
                 self.block5_xcp = slim.batch_norm(self.block5_xcp)
                 self.block5_xcp=tf.nn.relu(self.block5_xcp)
 
-                self.block5_xcp= tf.layers.conv2d(
+                self.block5_xcp= tf.compat.v1.layers.conv2d(
                     self.block5_xcp, filters=512, kernel_size=[3, 3],
                     strides=(1, 1),padding='SAME', name="conv2_block5{}".format(k+1),
                 kernel_initializer=weight_init)  # bx25x25x728
@@ -292,27 +294,27 @@ class DexinedNetwork():
 
             # ------------------------- Block6 ----------------------------------------
             self.block6_xcp = self.add5_1
-            self.block6_xcp = tf.layers.conv2d(
+            self.block6_xcp = tf.compat.v1.layers.conv2d(
                 self.block6_xcp, filters=256, kernel_size=[1, 1], activation=None,
                 kernel_initializer=weight_init, strides=(1, 1), bias_initializer=tf.constant_initializer(0.0),
                 padding='SAME', name="conv0_b6")  # bx25x25x256
 
             self.block6_xcp = slim.batch_norm(self.block6_xcp)
-            self.addb25_2b6 = tf.layers.conv2d(
+            self.addb25_2b6 = tf.compat.v1.layers.conv2d(
                 self.block5_xcp, filters=256, kernel_size=[1, 1], activation=None,
                 kernel_initializer=weight_init, strides=(1, 1), bias_initializer=tf.constant_initializer(0.0),
                 padding='SAME', name="add2b6")  # bx25x25x256# skip right
             self.addb25_2b6 = slim.batch_norm(self.addb25_2b6)# skip right
             for k in range(3):
                 self.block6_xcp = tf.nn.relu(self.block6_xcp)
-                self.block6_xcp = tf.layers.conv2d(
+                self.block6_xcp = tf.compat.v1.layers.conv2d(
                     self.block6_xcp, filters=256, kernel_size=[3, 3],
                     strides=(1, 1), padding='SAME', name="conv1_block6{}".format(k + 1),
                 kernel_initializer=weight_init)  # bx25x25x256
                 self.block6_xcp = slim.batch_norm(self.block6_xcp)
                 self.block6_xcp = tf.nn.relu(self.block6_xcp)
 
-                self.block6_xcp = tf.layers.conv2d(
+                self.block6_xcp = tf.compat.v1.layers.conv2d(
                     self.block6_xcp, filters=256, kernel_size=[3, 3],
                     strides=(1, 1), padding='SAME', name="conv2_block6{}".format(k + 1),
                 kernel_initializer=weight_init)  # bx25x25x256
@@ -327,7 +329,7 @@ class DexinedNetwork():
             self.side_outputs = [self.output1, self.output2, self.output3,
                                  self.output4, self.output5,self.output6]
 
-            self.fuse = tf.layers.conv2d(tf.concat(self.side_outputs, 3),filters=1,
+            self.fuse = tf.compat.v1.layers.conv2d(tf.concat(self.side_outputs, 3),filters=1,
                                         kernel_size=[1,1], name='fuse_1',strides=(1,1),padding='same',
                                         kernel_initializer=tf.constant_initializer(1 / len(self.side_outputs)))
             self.outputs = self.side_outputs + [self.fuse]
@@ -341,11 +343,11 @@ class DexinedNetwork():
                    kernel_initializer=None, strides=(1,1), separable_conv=False):
 
         if separable_conv:
-            conv = tf.layers.separable_conv2d(
+            conv = tf.compat.v1.layers.separable_conv2d(
                 inputs, filters=filters, kernel_size=kernel_size,
                 depth_multiplier=depth_multiplier, padding=padding, name=name)
         else:
-            conv= tf.layers.conv2d(inputs, filters=filters, kernel_size=kernel_size,
+            conv= tf.compat.v1.layers.conv2d(inputs, filters=filters, kernel_size=kernel_size,
                              strides=strides,padding=padding, kernel_initializer=kernel_initializer, name=name)
         return conv
 
@@ -374,7 +376,7 @@ class DexinedNetwork():
                         sub_net = tf.nn.bias_add(sub_net, biases)
                         sub_net = tf.nn.relu(sub_net)
 
-                        sub_net = tf.layers.conv2d_transpose(
+                        sub_net = tf.compat.v1.layers.conv2d_transpose(
                             sub_net, filters=filters, kernel_size=[(upscale), (upscale)],
                             strides=(2, 2), padding="SAME", kernel_initializer=tf.truncated_normal_initializer(stddev=0.1),
                             name='{}_deconv_{}_{}'.format(name, upscale, i)) # upscale/2
@@ -389,7 +391,7 @@ class DexinedNetwork():
                         sub_net = tf.nn.bias_add(sub_net, biases)
                         sub_net = tf.nn.relu(sub_net)
                         # *
-                        sub_net = tf.layers.conv2d_transpose(
+                        sub_net = tf.compat.v1.layers.conv2d_transpose(
                             sub_net, filters=output_filters, kernel_size=[(upscale), (upscale)],
                             strides=(2, 2), padding="SAME", kernel_initializer=kernel_init,
                             name='{}_deconv_{}_{}'.format(name, upscale, i))
@@ -546,8 +548,9 @@ def export():
         print(f"Output Node Name: {tensor_name}")
 
         # Export the model as a frozen graph.
-        frozen_graph_def = convert_variables_to_constants(session,
-            session.graph_def, tensor_name)
+        frozen_graph_def = \
+            tf.compat.v1.graph_util.convert_variables_to_constants(session,
+                session.graph_def, tensor_name)
 
         # Save the frozen graph version v1.
         with open(graph_filepath, 'wb') as wf:
@@ -570,10 +573,10 @@ def export():
         tensor_name = model.avg_edgemap.name
         # Remove the ":0" from the tensor name to get the node name, make it a list.
         tensor_name = [tensor_name.split(":")[0]]
-        print(f"Output Node Name: {tensor_name}")
 
         # Export the model as a frozen graph.
-        frozen_graph_def = convert_variables_to_constants(session,
+        frozen_graph_def = \
+            tf.compat.v1.graph_util.convert_variables_to_constants(session,
                 session.graph_def, tensor_name)
 
         # Save the frozen graph version v1.
