@@ -35,7 +35,6 @@ import tarfile
 
 import numpy as np
 import skimage.transform
-from imageio import imread, imwrite
 
 # %tensorflow_version 1.1x
 import tensorflow as tf
@@ -53,10 +52,6 @@ config.gpu_options.allow_growth = True
 
 # Ignore additional warnings and logs from TensorFlow.
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-
-# Set SEED for numpy
-SEED = 10
-np.random.seed(SEED)
 
 ###############################################################################
 
@@ -103,7 +98,7 @@ class DexinedModel(object):
             tar_file.close()
 
         elif self.FROZEN_GRAPH_NAME in model_init_path:
-            # Extract model from a prozen_inference_graph.pb file
+            # Extract model from a frozen graph file.
             with open(model_init_path, 'rb') as rf:
                 graph_def = tf.compat.v1.GraphDef.FromString(rf.read())
 
