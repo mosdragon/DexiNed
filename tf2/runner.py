@@ -33,6 +33,7 @@ class run_DexiNed():
 
     def train(self):
         train_dataset, val_dataset, test_dataset = get_loaders()
+        print(f"Loaded datasets")
 
         # Summary and checkpoint manager
         model_dir = "Dexined_tf2"
@@ -60,6 +61,7 @@ class run_DexiNed():
         step_count = -1
 
         for epoch in range(self.epochs):
+            print(f"Beginning Epoch [{epoch+1}]/[{self.epochs}] @ {time.ctime()}")
             # Train one epoch.
             train_losses = []
             for step, (x, y) in enumerate(train_dataset):

@@ -5,6 +5,7 @@ import tensorflow as tf
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 BUFFER_SIZE = 1024
+BATCH_SIZE = 16
 
 def parse_record(example_proto):
     # Create a dictionary describing the features.

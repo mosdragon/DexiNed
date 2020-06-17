@@ -65,14 +65,7 @@ arg = parser.parse_args()
 def main(args):
     model = run_DexiNed(epochs=args.max_epochs)
 
-    if args.model_state=='train':
-        model.train()
-    elif args.model_state =='test':
-        pass
-        # model.test()
-    else:
-        raise NotImplementedError('Sorry you just can test or train the model, please set in ' +
-            'args.model_state=')
+    model.train()
 
 if __name__=='__main__':
     main(args=arg)
