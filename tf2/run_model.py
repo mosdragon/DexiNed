@@ -4,9 +4,14 @@ import time, os
 import numpy as np
 from os.path import join
 import cv2 as cv
+from imageio import imread, imwrite
+import skimage
+import skimage.transform
+import skimage.color
 
 from model import *
-from utls import image_normalization,visualize_result, tensor2image, cv_imshow,h5_writer
+from utils import image_normalization
+# from utils import image_normalization, visualize_result, h5_writer
 from dataset_manager import DataLoader
 
 BUFFER_SIZE = 448
@@ -48,7 +53,7 @@ class run_DexiNed():
         train_writer = tf.summary.create_file_writer(train_log_dir)
         val_writer = tf.summary.create_file_writer(val_log_dir)
 
-        my_model = DexiNed(rgb_mean=self.args.rgbn_mean)#rgb_mean=self.args.rgbn_mean
+        my_model = DexiNedNetwork(rgb_mean=self.args.rgbn_mean)#rgb_mean=self.args.rgbn_mean
 
         accuracy = metrics.SparseCategoricalAccuracy()
         accuracy_val = metrics.SparseCategoricalAccuracy()
@@ -87,9 +92,10 @@ class run_DexiNed():
                     # visualize preds
                     img_test = 'Epoch: {0} Sample {1}/{2} Loss: {3}' \
                         .format(epoch, step, n_train//self.args.batch_size, loss.numpy())
-                    vis_imgs = visualize_result(
-                    x=x[2],y=y[2],p=preds,img_title=img_test)
-                    cv.imwrite(os.path.join(imgs_res_folder, 'results.png'), vis_imgs)
+                    # vis_imgs = visualize_result(x=x[2],y=y[2],p=preds,img_title=img_test)
+                    # imwrite(os.path.join(imgs_res_folder, 'results.png'), vis_imgs)
+                    # imwrite(os.path.join(imgs_res_folder, 'results.png'), preds.numpy())
+
                 if (step)%100==0 and loss < global_loss:
                     save_ckpt_path=os.path.join(checkpoint_dir, "DexiNedL_model.h5")
                     Model.save_weights(my_model,save_ckpt_path,save_format='h5')
@@ -140,7 +146,7 @@ class run_DexiNed():
         optimizer = tf.keras.optimizers.Adam(
             learning_rate=self.args.lr, beta_1=self.args.beta1)
 
-        my_model = DexiNed(rgb_mean=self.args.rgbn_mean)
+        my_model = DexiNedNetwork(rgb_mean=self.args.rgbn_mean)
         input_shape=test_data.input_shape
         my_model.build(input_shape=input_shape)# rgb_mean=self.args.rgbn_mean
 
@@ -184,24 +190,26 @@ class run_DexiNed():
                 for j in range(tmp_preds.shape[0]):
                     tmp_pred = tmp_preds[j, ...]
                     tmp_pred[tmp_pred < 0.0] = 0.0
-                    tmp_pred = cv.bitwise_not(np.uint8(image_normalization(tmp_pred)))
+                    tmp_pred = image_normalization(tmp_pred).astype(np.bool)
+                    tmp_pred = ~(tmp_pred)
+                    # tmp_pred = cv.bitwise_not(np.uint8(image_normalization(tmp_pred)))
                     h, w = tmp_pred.shape[:2]
                     if h != tmp_shape[0] or w != tmp_shape[1]:
-                        tmp_pred = cv.resize(tmp_pred, (tmp_shape[1], tmp_shape[0]))
+                        tmp_pred = skimage.transform.resize(tmp_pred, (tmp_shape[0], tmp_shape[1]))
+                        # tmp_pred = cv.resize(tmp_pred, (tmp_shape[1], tmp_shape[0]))
                     res_preds.append(tmp_pred)
                 for idx in range(len(save_dirs) - 1):
                     s_dir = save_dirs[idx]
                     tmp = res_preds[6+idx]
-                    cv.imwrite(join(s_dir, tmp_name + '.png'), tmp)
-                h5_writer(path=join(save_dirs[-1], tmp_name + '.h5'),
-                          vars=np.squeeze(res_preds))
+                    imwrite(join(s_dir, tmp_name + '.png'), tmp)
+                # h5_writer(path=join(save_dirs[-1], tmp_name + '.h5'),
+                          # vars=np.squeeze(res_preds))
                 print("saved:", join(save_dirs[-1], tmp_name + '.h5'), tmp_preds.shape)
                 k += 1
 
             # tmp_name = data_names[step][:-3]+"png"
             # tmp_shape = data_shape[step]
             # tmp_path = os.path.join(result_dir,tmp_name)
-            # tensor2image(preds[-1].numpy(), img_path =tmp_path,img_shape=tmp_shape)
 
         total_time = np.array(total_time)
 

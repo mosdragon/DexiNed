@@ -1,9 +1,15 @@
-import tensorflow as tf
-import numpy as np
-import h5py, os
+import os
 import random
-import cv2 as cv
 
+import numpy as np
+import tensorflow as tf
+
+from imageio import imread
+import skimage
+import skimage.transform
+import skimage.color
+
+import h5py
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 BUFFER_SIZE = 1024
@@ -71,7 +77,7 @@ class DataLoader(tf.keras.utils.Sequence):
         if not self.is_training:
             self.imgs_name = [os.path.basename(k) for k in input_path]
             for tmp_path in input_path:
-                tmp_i = cv.imread(tmp_path)
+                tmp_i = imread(tmp_path)
                 tmp_shape = tmp_i.shape[:2]
                 self.imgs_shape.append(tmp_shape)
         sample_indeces= [input_path, gt_path]
@@ -117,9 +123,9 @@ class DataLoader(tf.keras.utils.Sequence):
         return x,y
 
     def transformer(self, x_path, y_path):
-        tmp_x = cv.imread(x_path)
+        tmp_x = imread(x_path)
         if y_path is not None:
-            tmp_y = cv.imread(y_path,cv.IMREAD_GRAYSCALE)
+            tmp_y = skimage.color.rgb2gray(imread(y_path))
         else:
             tmp_y=None
         h,w,_ = tmp_x.shape
@@ -130,13 +136,13 @@ class DataLoader(tf.keras.utils.Sequence):
                 tmp_x = tmp_x[i_h:i_h+self.dim_h,i_w:i_w+self.dim_w,]
                 tmp_y = tmp_y[i_h:i_h+self.dim_h,i_w:i_w+self.dim_w,]
             else:
-                tmp_x = cv.resize(tmp_x,(self.dim_w,self.dim_h))
-                tmp_y = cv.resize(tmp_y,(self.dim_w,self.dim_h))
+                tmp_x = skimage.transform.resize(tmp_x,(self.dim_h,self.dim_w))
+                tmp_y = skimage.transform.resize(tmp_y,(self.dim_h,self.dim_w))
         else:
             if self.dim_w!=w and self.dim_h!=h:
-                tmp_x = cv.resize(tmp_x, (self.dim_w, self.dim_h))
+                tmp_x = skimage.transform.resize(tmp_x, (self.dim_h, self.dim_w))
                 if tmp_y is not None:
-                    tmp_y = cv.resize(tmp_y, (self.dim_w, self.dim_h))
+                    tmp_y = skimage.transform.resize(tmp_y, (self.dim_h, self.dim_w))
 
         if tmp_y is not None:
             tmp_y = np.expand_dims(np.float32(tmp_y)/255.,axis=-1)

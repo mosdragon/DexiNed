@@ -8,8 +8,18 @@ __homepage__="www.cvc.uab.cat/people/xsoria"
 __credits__=["tensorflow_tutorial"]
 __copyright__   = "Copyright 2020, CIMI"
 
+# Ignore the annoying warnings that come up, there are many of them.
+import warnings
+import os
+warnings.filterwarnings("ignore")
+warnings.simplefilter("ignore")
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
+
 import argparse
-import platform
+
+import tensorflow as tf
+# Ignore deprecation warnings
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.FATAL)
 
 from run_model import run_DexiNed
 from dataset_manager import dataset_info
@@ -34,13 +44,13 @@ parser.add_argument("--data4train",default=TRAIN_DATA, type=str)
 parser.add_argument("--data4test",default=TEST_DATA, type=str)
 parser.add_argument('--train_list', default=train_data_inf['train_list'], type=str)  # SSMIHD: train_rgb_pair.lst, others train_pair.lst
 parser.add_argument('--test_list', default=test_data_inf['test_list'], type=str)  # SSMIHD: train_rgb_pair.lst, others train_pair.lst
-parser.add_argument("--model_state",default='test', choices=["train", "test", "export"])
+parser.add_argument("--model_state",default='train', choices=["train", "test", "export"])
 parser.add_argument("--output_dir", default='results', help="where to put output files")
 parser.add_argument("--checkpoint_dir", default='checkpoints', help="directory with checkpoint to resume training from or use for testing")
 
 parser.add_argument('--model_name', default='DexiNed', choices=['DexiNed'])
 parser.add_argument('--continue_training', default=False, type=bool)
-parser.add_argument("--max_epochs", type=int,default=24, help="number of training epochs")#24
+parser.add_argument("--max_epochs", type=int,default=2, help="number of training epochs")#24
 parser.add_argument("--summary_freq", type=int, default=100, help="update summaries every summary_freq steps")
 parser.add_argument("--progress_freq", type=int, default=50, help="display progress every progress_freq steps")
 parser.add_argument("--display_freq", type=int, default=10, help="write current training images every display_freq steps")
