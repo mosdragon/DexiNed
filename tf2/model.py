@@ -302,14 +302,14 @@ class DexiNedNetwork(tf.keras.Model):
         return results
 
 
-def pre_process_binary_cross_entropy(bc_loss,input, label,arg, use_tf_loss=False):
+def pre_process_binary_cross_entropy(bc_loss, images, label, use_tf_loss=False):
     # preprocess data
     y = label
     loss = 0
-    w_loss=1.0
+    w_loss = 1.0
     preds = []
-    for tmp_p in input:
-        # tmp_p = input[i]
+    for tmp_p in images:
+        # tmp_p = images[i]
 
         # loss processing
         tmp_y = tf.cast(y, dtype=tf.float32)

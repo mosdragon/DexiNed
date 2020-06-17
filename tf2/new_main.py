@@ -16,13 +16,9 @@ warnings.simplefilter("ignore")
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
 
 import argparse
-
 import tensorflow as tf
-# Ignore deprecation warnings
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.FATAL)
 
-from run_model import run_DexiNed
-from dataset_manager import dataset_info
+from runner import run_DexiNed
 
 
 # Testing settings
@@ -32,19 +28,9 @@ DATASET_NAME= ['BIPED','BSDS','BSDS300','CID','DCD','MULTICUE',
 TEST_DATA = 'BIPED'
 TRAIN_DATA = 'BIPED'
 
-test_data_inf = dataset_info(TEST_DATA)
-train_data_inf = dataset_info(TRAIN_DATA)
-
 # Training settings
 
 parser = argparse.ArgumentParser(description='Edge detection parameters for feeding the model')
-parser.add_argument("--train_dir",default=train_data_inf['data_dir'], help="path to folder containing images")
-parser.add_argument("--test_dir",default=test_data_inf['data_dir'], help="path to folder containing images")
-parser.add_argument("--data4train",default=TRAIN_DATA, type=str)
-parser.add_argument("--data4test",default=TEST_DATA, type=str)
-parser.add_argument('--train_list', default=train_data_inf['train_list'], type=str)  # SSMIHD: train_rgb_pair.lst, others train_pair.lst
-parser.add_argument('--test_list', default=test_data_inf['test_list'], type=str)  # SSMIHD: train_rgb_pair.lst, others train_pair.lst
-parser.add_argument("--model_state",default='train', choices=["train", "test", "export"])
 parser.add_argument("--output_dir", default='results', help="where to put output files")
 parser.add_argument("--checkpoint_dir", default='checkpoints', help="directory with checkpoint to resume training from or use for testing")
 
@@ -63,9 +49,9 @@ parser.add_argument("--image_height", type=int, default=400, help="scale images 
 parser.add_argument("--image_width", type=int, default=400, help="scale images to this size before cropping to 256x256")
 parser.add_argument("--crop_img", type=bool, default=False,
                     help="4Training: True crop image, False resize image")
-parser.add_argument("--test_img_height", type=int, default=test_data_inf["img_height"],
+parser.add_argument("--test_img_height", type=int, default=720,
                     help="network input height size")
-parser.add_argument("--test_img_width", type=int, default=test_data_inf["img_width"],
+parser.add_argument("--test_img_width", type=int, default=720,
                     help="network input height size")
 
 parser.add_argument("--lr", type=float, default=0.0002, help=" learning rate for adam 1e-4")
@@ -77,12 +63,13 @@ parser.add_argument("--rgbn_mean", type=float, default=[103.939,116.779,123.68, 
 arg = parser.parse_args()
 
 def main(args):
-    model = run_DexiNed(args=args)
+    model = run_DexiNed(epochs=args.max_epochs)
 
     if args.model_state=='train':
         model.train()
     elif args.model_state =='test':
-        model.test()
+        pass
+        # model.test()
     else:
         raise NotImplementedError('Sorry you just can test or train the model, please set in ' +
             'args.model_state=')
