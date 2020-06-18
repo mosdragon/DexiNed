@@ -4,8 +4,8 @@ Load in data partitions using the TF Record files.
 import tensorflow as tf
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
-BUFFER_SIZE = 1024
-BATCH_SIZE = 16
+BUFFER_SIZE = 512
+BATCH_SIZE = 8
 
 def parse_record(example_proto):
     # Create a dictionary describing the features.

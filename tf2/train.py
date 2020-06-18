@@ -36,7 +36,7 @@ parser.add_argument("--checkpoint_dir", default='checkpoints', help="directory w
 
 parser.add_argument('--model_name', default='DexiNed', choices=['DexiNed'])
 parser.add_argument('--continue_training', default=False, type=bool)
-parser.add_argument("--max_epochs", type=int,default=2, help="number of training epochs")#24
+parser.add_argument("--max_epochs", type=int,default=200, help="number of training epochs")#24
 parser.add_argument("--summary_freq", type=int, default=10, help="update summaries every summary_freq steps")
 parser.add_argument("--progress_freq", type=int, default=10, help="display progress every progress_freq steps")
 parser.add_argument("--display_freq", type=int, default=10, help="write current training images every display_freq steps")

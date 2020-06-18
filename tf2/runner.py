@@ -81,8 +81,8 @@ class run_DexiNed():
                 # Log the current accuracy value so far.
                 if (step + 1) % 10 == 0:
                     print(f"[{epoch + 1}/{self.epochs}]: Step {step + 1} " +
-                            f"Loss {np.round(loss.numpy(), 4)} " +
-                            f"Accuracy: {np.round(accuracy.result(), 4)} " +
+                            f"Loss {loss.numpy():.3f} " +
+                            f"Accuracy: {accuracy.result():.3f} " +
                             f" @ {time.ctime()})")
 
                 # if (step + 1) % 30 == 0:
@@ -90,7 +90,7 @@ class run_DexiNed():
                         tf.summary.scalar('batch_loss', loss.numpy(), step=step_count)
 
                 if (step + 1) % 100 == 0 and loss < global_loss:
-                    save_ckpt_path = os.path.join(checkpoint_dir, "DexiNed_model_{epoch}_{step}.h5")
+                    save_ckpt_path = os.path.join(checkpoint_dir, f"DexiNed_model_{epoch}.h5")
 
                     KerasModel.save_weights(model, save_ckpt_path, save_format='h5')
                     global_loss = loss
