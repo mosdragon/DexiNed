@@ -9,7 +9,6 @@ from imageio import imread, imwrite
 import skimage.transform
 import numpy as np
 
-import cv2
 import tensorflow as tf
 from model import *
 
@@ -31,9 +30,7 @@ if __name__ == '__main__':
     RGBN_MEAN = [103.939,116.779,123.68, 137.86]
     model = DexiNed(rgb_mean=RGBN_MEAN)
 
-    img = imread("figures/living_room.jpg")
-    print(f"{np.min(img)}    {np.max(img)}")
-    img = img.astype(np.float32) / 255.0
+    img = imread("figures/living_room.jpg").astype(np.float32)
     print(f"{np.min(img)}    {np.max(img)}")
 
     R = np.mean(img[:, :, 0])
@@ -48,8 +45,8 @@ if __name__ == '__main__':
     img_batch = img.reshape((1, 512, 512, -1)).astype(np.float32)
     img_batch = tf.constant(img_batch)
     print(f"Img batch: {img_batch.shape}")
-
     model.build(input_shape=img_batch.shape)
+
     model_path = 'checkpoints/DexiNed2BIPED/DexiNed23_model.h5'
     model.load_weights(model_path)
 
@@ -60,11 +57,13 @@ if __name__ == '__main__':
     print(f"All preds: {preds.shape}")
 
     avg = np.mean(preds, axis=0)
+    assert (512, 512) == avg.shape
+
     avg[avg < 0.0] = 0.0
     avg = image_normalization(avg).astype(np.uint8)
+    # Invert
     avg = (255 - avg)
-    # avg = cv2.bitwise_not(np.uint8(image_normalization(avg)))
-    print(f"Avg: {avg.shape} {np.min(avg)}  {np.max(avg)}")
+    print(f"Avg: {avg.shape} {np.min(avg)} {np.max(avg)}")
 
     out_filepath = "figures/living_room_edges.png"
     imwrite(out_filepath, avg)
@@ -72,4 +71,5 @@ if __name__ == '__main__':
         # Save to final checkpoint name
     filepath = "checkpoints/final_dexined_tf2_model/"
     print(f"Saving exported model to {filepath}")
-    # tf.saved_model.save(model, filepath)
+    tf.saved_model.save(model, filepath)
+
