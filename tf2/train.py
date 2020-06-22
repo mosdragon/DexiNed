@@ -20,11 +20,6 @@ import tensorflow as tf
 
 from runner import run_DexiNed
 
-
-# Testing settings
-DATASET_NAME= ['BIPED','BSDS','BSDS300','CID','DCD','MULTICUE',
-    'PASCAL','NYUD','CLASSIC']
-
 TEST_DATA = 'BIPED'
 TRAIN_DATA = 'BIPED'
 
@@ -36,7 +31,7 @@ parser.add_argument("--checkpoint_dir", default='checkpoints', help="directory w
 
 parser.add_argument('--model_name', default='DexiNed', choices=['DexiNed'])
 parser.add_argument('--continue_training', default=False, type=bool)
-parser.add_argument("--max_epochs", type=int,default=200, help="number of training epochs")#24
+parser.add_argument("--max_epochs", type=int,default=10, help="number of training epochs")#24
 parser.add_argument("--summary_freq", type=int, default=10, help="update summaries every summary_freq steps")
 parser.add_argument("--progress_freq", type=int, default=10, help="display progress every progress_freq steps")
 parser.add_argument("--display_freq", type=int, default=10, help="write current training images every display_freq steps")
@@ -54,7 +49,7 @@ parser.add_argument("--test_img_height", type=int, default=720,
 parser.add_argument("--test_img_width", type=int, default=720,
                     help="network input height size")
 
-parser.add_argument("--lr", type=float, default=0.0002, help=" learning rate for adam 1e-4")
+parser.add_argument("--lr", type=float, default=0.0002, help="learning rate for adam")
 parser.add_argument("--beta1", type=float, default=0.5, help="momentum term of adam")
 parser.add_argument("--l1_weight", type=float, default=100.0, help="weight on L1 term for generator gradient")
 parser.add_argument("--gan_weight", type=float, default=1.0, help="weight on GAN term for generator gradient")
@@ -64,8 +59,8 @@ arg = parser.parse_args()
 
 def main(args):
     model = run_DexiNed(epochs=args.max_epochs)
-
     model.train()
+
 
 if __name__=='__main__':
     main(args=arg)

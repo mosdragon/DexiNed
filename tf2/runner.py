@@ -12,9 +12,6 @@ import skimage.color
 from tensorflow.keras.models import Model as KerasModel
 
 from model import *
-from utils import image_normalization
-# from utils import image_normalization, visualize_result, h5_writer
-
 from data import get_loaders
 
 BUFFER_SIZE = 1024
@@ -38,21 +35,18 @@ class run_DexiNed():
         # Summary and checkpoint manager
         model_dir = "Dexined_tf2"
         summary_dir = os.path.join('logs', model_dir)
-        train_log_dir = os.path.join(summary_dir, 'train')
-        val_log_dir = os.path.join(summary_dir, 'test')
 
         checkpoint_dir = os.path.join('checkpoints' , model_dir)
         epoch_ckpt_dir = os.path.join(checkpoint_dir + 'epochs')
         os.makedirs(epoch_ckpt_dir, exist_ok=True)
-        os.makedirs(train_log_dir,exist_ok=True)
-        os.makedirs(val_log_dir,exist_ok=True)
+        os.makedirs(summary_dir, exist_ok=True)
         os.makedirs(checkpoint_dir, exist_ok=True)
 
         tf_writer = tf.summary.create_file_writer(summary_dir)
         model = DexiNedNetwork(rgb_mean=self.RGBN_MEAN)
 
         accuracy = metrics.SparseCategoricalAccuracy()
-        accuracy_val = metrics.SparseCategoricalAccuracy()
+        val_accuracy = metrics.SparseCategoricalAccuracy()
         loss_bc = losses.BinaryCrossentropy()
         optimizer = optimizers.Adam(learning_rate=self.init_lr, beta_1=self.beta1)
 
@@ -61,7 +55,7 @@ class run_DexiNed():
         step_count = -1
 
         for epoch in range(self.epochs):
-            print(f"Beginning Epoch [{epoch+1}]/[{self.epochs}] @ {time.ctime()}")
+            print(f"Start Training Epoch [{epoch+1}]/[{self.epochs}] @ {time.ctime()}")
             # Train one epoch.
             train_losses = []
             for step, (x, y) in enumerate(train_dataset):
@@ -69,32 +63,36 @@ class run_DexiNed():
 
                 with tf.GradientTape() as tape:
                     pred = model(x, training=True)
-                    preds, loss = pre_process_binary_cross_entropy(loss_bc,
-                            pred, y, use_tf_loss=False)
+                    loss = custom_weighted_cross_entropy(pred, y)
 
-                accuracy.update_state(y_true=y, y_pred=preds[-1])
+                accuracy.update_state(y_true=y, y_pred=pred)
                 gradients = tape.gradient(loss, model.trainable_variables)
                 optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
-                train_losses.append(loss.numpy())
+                train_losses.extend(loss.numpy().squeeze().tolist())
+                batch_loss = np.mean(loss.numpy())
 
                 # Log the current accuracy value so far.
                 if (step + 1) % 10 == 0:
                     print(f"[{epoch + 1}/{self.epochs}]: Step {step + 1} " +
-                            f"Loss {loss.numpy():.3f} " +
-                            f"Accuracy: {accuracy.result():.3f} " +
+                            f"Loss {batch_loss:.3f} " +
+                            f"Accuracy: {str(accuracy.result())} " +
                             f" @ {time.ctime()})")
 
-                # if (step + 1) % 30 == 0:
                     with tf_writer.as_default():
-                        tf.summary.scalar('batch_loss', loss.numpy(), step=step_count)
+                        tf.summary.scalar('batch_loss', batch_loss, step=step_count)
+                        tf.summary.scalar('batch_loss_avg', np.mean(train_losses), step=step_count)
 
-                if (step + 1) % 100 == 0 and loss < global_loss:
-                    save_ckpt_path = os.path.join(checkpoint_dir, f"DexiNed_model_{epoch}.h5")
+                    train_losses = []
+
+                mean_loss = np.mean(train_losses)
+                if (step + 1) % 100 == 0 and mean_loss < global_loss:
+                    save_ckpt_path = os.path.join(checkpoint_dir, f"model_{epoch}.h5")
 
                     KerasModel.save_weights(model, save_ckpt_path, save_format='h5')
-                    global_loss = loss
+                    global_loss = mean_loss
                     print(f"Model saved in: {save_ckpt_path} Current loss: {global_loss.numpy()}")
+                    # accuracy.reset_states()
 
             # Post-epoch training summary
             mean_loss = np.mean(train_losses)
@@ -106,12 +104,35 @@ class run_DexiNed():
 
             epoch_checkpoint = os.path.join(epoch_ckpt_dir, "DexiNed_epoch{epoch}.h5")
             KerasModel.save_weights(model, epoch_checkpoint, save_format=ckpt_save_mode)
-            print(f"{epoch+1}/{self.epochs} Complete. Loss: {mean_loss} Acc: {mean_acc}")
+            print(f"Finished [{epoch+1}/{self.epochs}]. " +
+                    f"Loss: {str(mean_loss)} Acc: {str(mean_acc)} " +
+                    f"@ {time.ctime()}")
 
             # TODO: Validation.
+            val_losses = []
+            for step, (x, y) in enumerate(test_dataset):
+                pred = model(x, training=False)
+                loss = custom_weighted_cross_entropy(pred, y)
+
+                val_accuracy.update_state(y_true=y, y_pred=pred)
+                val_losses.extend(loss.numpy().squeeze().tolist())
+
+
+            # Summarize
+            mean_val_loss = np.mean(val_losses)
+            mean_val_acc = val_accuracy.result()
+            with tf_writer.as_default():
+                tf.summary.scalar('val_loss', mean_val_loss, step=epoch)
+                tf.summary.scalar('val_accuracy', mean_val_acc, step=epoch)
+
+            print(f"Validation [{epoch + 1}/{self.epochs}]: " +
+                    f"Loss {mean_val_loss} " +
+                    f"Accuracy: {mean_val_acc} " +
+                    f" @ {time.ctime()})")
+
+
 
             # Reset metrics every epoch
             accuracy.reset_states()
-
-        # print(model.summary())
+            val_accuracy.reset_states()
 

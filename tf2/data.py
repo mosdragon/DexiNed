@@ -4,7 +4,8 @@ Load in data partitions using the TF Record files.
 import tensorflow as tf
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
-BUFFER_SIZE = 512
+SHUFFLE_SIZE = 48960  # Same size as training set
+PREFETCH_SIZE = 2
 BATCH_SIZE = 8
 
 def parse_record(example_proto):
@@ -44,18 +45,22 @@ def load_image(img, mask):
 
 
 def get_loaders():
-    tf_trn = read_tfrecord_dataset("datasets/biped_trn.tfrecord")
-    tf_val = read_tfrecord_dataset("datasets/biped_val.tfrecord")
-    tf_tst = read_tfrecord_dataset("datasets/biped_tst.tfrecord")
+    # train = read_tfrecord_dataset("datasets/biped_trn.tfrecord")
+    train = read_tfrecord_dataset("datasets/biped_val.tfrecord")
+    val = read_tfrecord_dataset("datasets/biped_val.tfrecord")
+    test = read_tfrecord_dataset("datasets/biped_tst.tfrecord")
 
     # Create the training and testing data loaders
-    train = tf_trn.map(load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    val = tf_val.map(load_image)
-    test = tf_tst.map(load_image)
+    train = train.map(load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    val = val.map(load_image)
+    test = test.map(load_image)
 
-    train_dataset = train.cache().shuffle(BUFFER_SIZE).batch(BATCH_SIZE).repeat()
-    train_dataset = train_dataset.prefetch(buffer_size=AUTOTUNE)
-    val_dataset = val.batch(BATCH_SIZE)
-    test_dataset = test.batch(BATCH_SIZE)
+    train = train.cache('./tmp/train.data')
+    train = train.shuffle(SHUFFLE_SIZE, reshuffle_each_iteration=True)
+    train = train.batch(BATCH_SIZE).prefetch(buffer_size=PREFETCH_SIZE)
 
-    return (train_dataset, val_dataset, test_dataset)
+    val = val.cache("./tmp/val.data")
+    val = val.batch(BATCH_SIZE).prefetch(buffer_size=PREFETCH_SIZE)
+    test = test.batch(BATCH_SIZE)
+
+    return (train, val, test)

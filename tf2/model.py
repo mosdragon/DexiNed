@@ -11,7 +11,7 @@ import tensorflow as tf
 l2 = regularizers.l2
 w_decay= None #0.0#2e-4#1e-3, 2e-4 # please define weight decay
 K.clear_session()
-weight_init = tf.initializers.glorot_normal()
+weight_init = tf.initializers.glorot_uniform()
 
 
 class _DenseLayer(layers.Layer):
@@ -90,7 +90,7 @@ class UpConvBlock(layers.Layer):
             if i==up_scale-1:
                 features.append(layers.Conv2D(
                     filters=out_features, kernel_size=(1,1), strides=(1,1), padding='same',
-                    activation='relu', kernel_initializer=weight_init,
+                    activation='relu', kernel_initializer=tf.initializers.TruncatedNormal(stddev=0.1),
                     kernel_regularizer=k_reg,use_bias=True)) #tf.initializers.TruncatedNormal(mean=0.)
                 features.append(layers.Conv2DTranspose(
                     out_features, kernel_size=(total_up_scale,total_up_scale),
@@ -131,7 +131,7 @@ class SingleConvBlock(layers.Layer):
         k_reg = None if w_decay is None else l2(w_decay)
         self.conv = layers.Conv2D(
             filters=out_features, kernel_size=k_size, strides=stride,
-            padding='same', use_bias=True,kernel_initializer=w_init,
+            padding='same', kernel_initializer=w_init,
             kernel_regularizer=k_reg, bias_initializer=bias_init)
         if self.use_bn:
             self.bn = layers.BatchNormalization()
@@ -298,11 +298,55 @@ class DexiNedNetwork(tf.keras.Model):
         block_cat = self.block_cat(block_cat)  # BxHxWX1
 
         results.append(block_cat)
-
+        # results = tf.concat(results, 3)  # BxHxWx7
         return results
 
+        # print(f"BEFORE sigmoid: {results.shape}, {results.numpy()[:3,:2, -2:]}")
+        # results = tf.sigmoid(results)
+        # print(f"After sigmoid: {results.shape}")
+        # return results
 
-def pre_process_binary_cross_entropy(bc_loss, images, label, use_tf_loss=False):
+        # TODO: Maybe restore this.
+        # results.append(block_cat)
+        # return results
+
+
+def custom_weighted_cross_entropy(logits, label):
+    """
+    Initially proposed in: 'Holistically-Nested Edge Detection (CVPR 15)'
+    Implements Equation [2] in https://arxiv.org/pdf/1504.06375.pdf
+    Compute edge pixels for each training sample and set as pos_weights to
+    tf.nn.weighted_cross_entropy_with_logits
+    """
+    b, h, w, c = logits.shape
+
+    y = tf.cast(label, tf.float32)
+    y_stack = [y for _ in range(c)]
+    y_stack = tf.concat(y_stack, -1)
+    # print(f"Logits: {logits.shape}, Y stack: {y_stack.shape}")
+
+    count_neg = tf.reduce_sum(1. - y_stack, axis=[1, 2, 3], keepdims=True)
+    count_pos  = tf.reduce_sum(y_stack, axis=[1, 2, 3], keepdims=True)
+    # Equation [2]
+    beta = count_neg / (count_neg + count_pos)
+
+    # print(f"CN: {count_neg.shape}    beta: {beta.shape}")
+
+    # Equation [2] divide by (1 - beta)
+    pos_weight = beta / (1 - beta)
+    cost = tf.nn.weighted_cross_entropy_with_logits(logits, y_stack, pos_weight)
+
+    # Multiply by (1 - beta)
+    cost = tf.reduce_mean(cost * (1 - beta))
+
+    # If an image has no edge pixels, treat loss as 0. Otherwise, keep the
+    # true loss for that image.
+    res = tf.where(tf.equal(count_pos, 0.0), 0.0, cost)
+    # print(f"Result: {res.shape}")
+    return res
+
+
+def pre_process_binary_cross_entropy(bc_loss, images, label):
     # preprocess data
     y = label
     loss = 0
@@ -316,9 +360,7 @@ def pre_process_binary_cross_entropy(bc_loss, images, label, use_tf_loss=False):
         mask = tf.dtypes.cast(tmp_y > 0., tf.float32)
         b,h,w,c=mask.get_shape()
         positives = tf.math.reduce_sum(mask, axis=[1, 2, 3], keepdims=True)
-        # positives = tf.math.reduce_sum(mask)
         negatives = h*w*c-positives
-        # negatives = tf.math.reduce_sum(1. - tmp_y)
 
         beta2 = positives / (negatives + positives) # negatives in hed
         beta = negatives/ (positives + negatives) # positives in hed
