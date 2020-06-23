@@ -12,63 +12,66 @@ import numpy as np
 import tensorflow as tf
 from model import *
 
-def image_normalization(img, img_min=0, img_max=255):
-    """This is a typical image normalization function
-    where the minimum and maximum of the image is needed
+def normalize(img):
+    """
+    This is a typical image normalization function to normalize the image
+    to values in the range [0, 255].
     source: https://en.wikipedia.org/wiki/Normalization_(image_processing)
-    :param img: an image could be gray scale or color
-    :param img_min:  for default is 0
-    :param img_max: for default is 255
-    :return: a normalized image, if max is 255 the dtype is uint8
+
+    Args:
+        :img: - a numpy array, either grayscale or RGB
+
+    Returns:
+        :img_normed: - a uint8 numpy array, with all values in range [0, 255]
     """
     img = np.float32(img)
-    epsilon=1e-12 # whenever an inconsistent image
-    img = (img-np.min(img))*(img_max-img_min)/((np.max(img)-np.min(img))+epsilon)+img_min
-    return img
+    epsilon = 1e-12
+    v_min = np.min(img)
+    v_max = np.max(img) - np.min(img) + epsilon
+
+    img_normed = (img - v_min) / v_max
+    img_normed = np.uint8(img_normed * 255.0)
+    return img_normed
 
 if __name__ == '__main__':
-    RGBN_MEAN = [103.939,116.779,123.68, 137.86]
-    model = DexiNed(rgb_mean=RGBN_MEAN)
+    model = DexiNed()
+    print(f"MODEL: {model.rgb_mean} {type(model.rgb_mean)}")
 
     img = imread("figures/living_room.jpg").astype(np.float32)
-    print(f"{np.min(img)}    {np.max(img)}")
 
     R = np.mean(img[:, :, 0])
     G = np.mean(img[:, :, 1])
     B = np.mean(img[:, :, 2])
 
-    img[:, :, 0] -= R
-    img[:, :, 1] -= G
-    img[:, :, 2] -= B
+    # img[:, :, 0] -= R
+    # img[:, :, 1] -= G
+    # img[:, :, 2] -= B
 
     img = skimage.transform.resize(img, (512, 512))
     img_batch = img.reshape((1, 512, 512, -1)).astype(np.float32)
     img_batch = tf.constant(img_batch)
-    print(f"Img batch: {img_batch.shape}")
     model.build(input_shape=img_batch.shape)
 
     model_path = 'checkpoints/DexiNed2BIPED/DexiNed23_model.h5'
     model.load_weights(model_path)
 
     preds = model(img_batch, training=False)
-    preds = [tf.sigmoid(i).numpy().squeeze() for i in preds]
-    # preds = [i.numpy().squeeze() for i in preds]
-    preds = np.array(preds)
-    print(f"All preds: {preds.shape}")
+    print(f"Preds: {preds.shape}")
+    # preds = tf.sigmoid(preds)
+    # preds = preds.numpy().squeeze()
 
-    avg = np.mean(preds, axis=0)
+    avg = preds.numpy().squeeze()
     assert (512, 512) == avg.shape
 
     avg[avg < 0.0] = 0.0
-    avg = image_normalization(avg).astype(np.uint8)
+    avg = normalize(avg)
     # Invert
     avg = (255 - avg)
-    print(f"Avg: {avg.shape} {np.min(avg)} {np.max(avg)}")
 
-    out_filepath = "figures/living_room_edges.png"
+    out_filepath = "figures/living_room_edges_norm.png"
     imwrite(out_filepath, avg)
 
-        # Save to final checkpoint name
+    # Save to final checkpoint name
     filepath = "checkpoints/final_dexined_tf2_model/"
     print(f"Saving exported model to {filepath}")
     tf.saved_model.save(model, filepath)

@@ -1,3 +1,6 @@
+
+import numpy as np
+
 from tensorflow.keras import callbacks
 from tensorflow.keras import layers, regularizers
 from tensorflow.keras import optimizers, metrics, losses
@@ -191,10 +194,12 @@ class DoubleConvBlock(layers.Layer):
 class DexiNed(tf.keras.Model):
     """DexiNet model."""
 
-    def __init__(self,rgb_mean=None,
+    def __init__(self,
                  **kwargs):
         super(DexiNed, self).__init__(**kwargs)
-        self.rgbn_mean = rgb_mean
+        self.rgb_mean = tf.constant(np.array([103.939,116.779,123.68]).astype(
+            np.float32))
+
         self.block_1 = DoubleConvBlock(32, 64, stride=(2,2),use_act=False)
         self.block_2 = DoubleConvBlock(128,use_act=False)
         self.dblock_3 = _DenseBlock(2, 256)
@@ -248,7 +253,7 @@ class DexiNed(tf.keras.Model):
 
     def call(self, x):
         # Block 1
-        x = x-self.rgbn_mean[:-1]
+        x = x - self.rgb_mean
         block_1 = self.block_1(x)
         block_1_side = self.side_1(block_1)
 
@@ -299,8 +304,10 @@ class DexiNed(tf.keras.Model):
         block_cat = self.block_cat(block_cat)  # BxHxWX1
 
         results.append(block_cat)
-
-        return results
+        stack = tf.concat(results, 3)  # BxHxWx7
+        stack = tf.sigmoid(stack)
+        avg_edgemap = tf.math.reduce_mean(stack, -1)
+        return avg_edgemap
 
 def weighted_cross_entropy_loss(input, label):
     y = tf.cast(label,dtype=tf.float32)
