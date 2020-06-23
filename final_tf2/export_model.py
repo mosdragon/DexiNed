@@ -38,14 +38,11 @@ if __name__ == '__main__':
     print(f"MODEL: {model.rgb_mean} {type(model.rgb_mean)}")
 
     img = imread("figures/living_room.jpg").astype(np.float32)
+    R, G, B = [103.939,116.779,123.68]
 
-    R = np.mean(img[:, :, 0])
-    G = np.mean(img[:, :, 1])
-    B = np.mean(img[:, :, 2])
-
-    # img[:, :, 0] -= R
-    # img[:, :, 1] -= G
-    # img[:, :, 2] -= B
+    img[:, :, 0] -= R
+    img[:, :, 1] -= G
+    img[:, :, 2] -= B
 
     img = skimage.transform.resize(img, (512, 512))
     img_batch = img.reshape((1, 512, 512, -1)).astype(np.float32)
@@ -56,10 +53,6 @@ if __name__ == '__main__':
     model.load_weights(model_path)
 
     preds = model(img_batch, training=False)
-    print(f"Preds: {preds.shape}")
-    # preds = tf.sigmoid(preds)
-    # preds = preds.numpy().squeeze()
-
     avg = preds.numpy().squeeze()
     assert (512, 512) == avg.shape
 

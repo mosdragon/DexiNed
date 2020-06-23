@@ -306,7 +306,7 @@ class DexiNed(tf.keras.Model):
         results.append(block_cat)
         stack = tf.concat(results, 3)  # BxHxWx7
         stack = tf.sigmoid(stack)
-        avg_edgemap = tf.math.reduce_mean(stack, -1)
+        avg_edgemap = tf.math.reduce_mean(stack, axis=-1, name="avg_edgemap")
         return avg_edgemap
 
 def weighted_cross_entropy_loss(input, label):

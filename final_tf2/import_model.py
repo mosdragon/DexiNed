@@ -38,31 +38,23 @@ def normalize(img):
 if __name__ == "__main__":
     model_path = "checkpoints/final_dexined_tf2_model/"
     model = tf.saved_model.load(model_path)
-    print(f"Model summary: {dir(model)}")
     print(f"Model loaded")
     print(f"Model type: {type(model)}")
-    print(f"RGBN_MEAN: {model.rgb_mean}")
 
     img = imread("figures/living_room.jpg").astype(np.float32)
-    print(f"{np.min(img)}    {np.max(img)}")
+    h, w, c = img.shape
 
-    R = np.mean(img[:, :, 0])
-    G = np.mean(img[:, :, 1])
-    B = np.mean(img[:, :, 2])
-
-    # img[:, :, 0] -= R
-    # img[:, :, 1] -= G
-    # img[:, :, 2] -= B
+    R, G, B = [103.939,116.779,123.68]
+    img[:, :, 0] -= R
+    img[:, :, 1] -= G
+    img[:, :, 2] -= B
 
     img = skimage.transform.resize(img, (512, 512))
     img_batch = img.reshape((1, 512, 512, -1)).astype(np.float32)
     img_batch = tf.constant(img_batch)
 
     preds = model(img_batch, training=False)
-    preds = tf.sigmoid(preds)
-    preds = preds.numpy().squeeze()
-
-    avg = np.mean(preds, axis=-1)
+    avg = preds.numpy().squeeze()
     assert (512, 512) == avg.shape
 
     avg[avg < 0.0] = 0.0
@@ -70,4 +62,6 @@ if __name__ == "__main__":
     # Invert
     avg = (255 - avg)
 
-    imwrite("figures/living_room_alt_norm.png", avg)
+    final_edgemap = skimage.transform.resize(avg, (h, w))
+
+    imwrite("figures/living_room_alt_norm.png", final_edgemap)
