@@ -1,7 +1,7 @@
 import warnings
 import os
 
-# os.environ["CUDA_VISIBLE_DEVICES"] = '-1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '-1'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 warnings.simplefilter("ignore")
 
@@ -33,6 +33,7 @@ def normalize(img):
     img_normed = np.uint8(img_normed * 255.0)
     return img_normed
 
+
 if __name__ == '__main__':
     model = DexiNed()
     print(f"MODEL: {model.rgb_mean} {type(model.rgb_mean)}")
@@ -49,11 +50,11 @@ if __name__ == '__main__':
     img_batch = tf.constant(img_batch)
     model.build(input_shape=img_batch.shape)
 
-    model_path = 'checkpoints/DexiNed2BIPED/DexiNed23_model.h5'
+    model_path = '../checkpoints/dexined_model_orig.h5'
     model.load_weights(model_path)
 
     preds = model(img_batch, training=False)
-    avg = preds.numpy().squeeze()
+    avg = preds.numpy()
     assert (512, 512) == avg.shape
 
     avg[avg < 0.0] = 0.0
@@ -65,7 +66,12 @@ if __name__ == '__main__':
     imwrite(out_filepath, avg)
 
     # Save to final checkpoint name
-    filepath = "checkpoints/final_dexined_tf2_model/"
+    filepath = "checkpoints/dexined_normalized/"
     print(f"Saving exported model to {filepath}")
     tf.saved_model.save(model, filepath)
+
+    # Save h5
+    filepath = "checkpoints/keras_dexined_weights.h5"
+    print(f"Saving keras model to {filepath}")
+    model.save_weights(filepath)
 

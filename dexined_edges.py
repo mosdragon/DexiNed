@@ -10,11 +10,8 @@ gs://ds-osama/postprocess/dexined/dexined_frozen_graph_{v1,v2}.pbtxt
 """
 
 ###############################################################################
-# TODO: Choose one of the two frozen graph paths, comment the other. Look at
-# checkpoints/README.md if you're unsure which one you want to use. See
-# <PROJECT-ROOT>/README.md to see where to retrieve these files.
-# DEXINED_MODEL_PATH = "./checkpoints/dexined_frozen_graph_v1.pbtxt"
-DEXINED_MODEL_PATH = "./checkpoints/dexined_frozen_graph_v2.pbtxt"
+# TODO: Ensure the model directory pointed to exists, see README for details.
+DEXINED_MODEL_PATH = "./checkpoints/dexined_keras_model"
 
 ###############################################################################
 
@@ -30,149 +27,48 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '4'
 
 ###############################################################################
 
-import os
-import tarfile
-
 import numpy as np
 import skimage.transform
 
 # %tensorflow_version 1.1x
 import tensorflow as tf
-from tensorflow.compat.v1 import ConfigProto
-from tensorflow.compat.v1 import InteractiveSession
 
 # Ignore deprecation warnings
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.FATAL)
 
-###############################################################################
-
-# These are to enable Model to run on GPU
-config = ConfigProto()
-config.gpu_options.allow_growth = True
-
-# Ignore additional warnings and logs from TensorFlow.
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-
-###############################################################################
-
-class DexinedModel(object):
-    """Class to load DexiNed model and run inference."""
-
-    # This is the name we gave to the network architecture input with a ":0"
-    # at the end to indicate we're providing the first such tensor as input.
-    INPUT_TENSOR_NAME = 'ImageTensor:0'
-
-    # These are the names from output_node_names, but with a ":0" at the end
-    # to indicate we want the first tensor of that name.
-    OUTPUT_TENSOR_NAME = 'avg_edgemap:0'
-
-    # This is the name of the frozen graph file. Even if this file is in a tar
-    # or zip archive, we want to make sure to read only this file to build the
-    # TensorFlow graph.
-    FROZEN_GRAPH_NAME = 'dexined_frozen_graph'
-
-    # Ensure these are the same as from DexinedNetwork.
-    TARGET_H = TARGET_W = 512
-    N_CHANNELS = 3
-
-    def __init__(self, model_init_path):
-        """
-        Loads the pretrained DexiNed model using the frozen graph file.
-
-        Args:
-            :model_init_path: - A path to either a tar archive with the frozen
-                graph file inside, or the path to the frozen graph file itself.
-        """
-        self.graph = tf.compat.v1.Graph()
-        graph_def = None
-
-        if 'tar.gz' in model_init_path:
-            # Extract frozen graph from tar archive.
-            tar_file = tarfile.open(model_init_path)
-            for tar_info in tar_file.getmembers():
-                if self.FROZEN_GRAPH_NAME in os.path.basename(tar_info.name):
-                    file_handle = tar_file.extractfile(tar_info)
-                    graph_def = tf.compat.v1.GraphDef.FromString(file_handle.read())
-                    break
-
-            tar_file.close()
-
-        elif self.FROZEN_GRAPH_NAME in model_init_path:
-            # Extract model from a frozen graph file.
-            with open(model_init_path, 'rb') as rf:
-                graph_def = tf.compat.v1.GraphDef.FromString(rf.read())
-
-        else:
-            raise ValueError(f"Unexpected file type: {model_init_path}")
-
-        if graph_def is None:
-            raise RuntimeError('Cannot find frozen inference graph in tar archive.')
-
-        with self.graph.as_default():
-            tf.import_graph_def(graph_def, name='')
-
-        self.session = tf.compat.v1.Session(graph=self.graph, config=config)
-
-
-    def run(self, img):
-        """
-        Produce the output edgemap.
-
-        Args:
-            :img: - an RGB image as a numpy array
-
-        Returns:
-            :avg_edgemap: - a grayscale image, of the same height/width
-                as the input img.
-        """
-
-        # If the image is not a float32 image, convert it.
-        if img.dtype == np.uint8:
-            img = img.astype(np.float32) / 255.0
-
-        # Get dimensions of the original image, store it to resize the edgemaps
-        # later.
-        src_h, src_w, _ = img.shape
-        src_dimensions = (src_h, src_w)
-
-        # Remove mean RGB value from image.
-        R = np.mean(img[:, :, 0])
-        G = np.mean(img[:, :, 1])
-        B = np.mean(img[:, :, 2])
-
-        img[:, :, 0] -= R
-        img[:, :, 1] -= G
-        img[:, :, 2] -= B
-
-        # Resize image so it can be passed through the network.
-        target_dimensions = (self.TARGET_H, self.TARGET_W)
-        img = skimage.transform.resize(img, target_dimensions)
-
-        # Turn this single image into a batch, the shape will be (1 x H x W x 3)
-        img_batched = img.reshape((1, self.TARGET_H, self.TARGET_W,
-            self.N_CHANNELS))
-
-        # This model outputs a single tensor of shape (1 x H x W x 1)
-        batch_avg_edgemap = self.session.run(
-            self.OUTPUT_TENSOR_NAME,
-            feed_dict={self.INPUT_TENSOR_NAME: img_batched})
-
-        # Here we squeeze the edgemap into shape (H x W)
-        avg_edgemap = batch_avg_edgemap.squeeze()
-
-        # Resize the edgemap to the same size as the input image.
-        avg_edgemap = skimage.transform.resize(avg_edgemap, src_dimensions)
-
-        # Finally, invert the colors so edges are 0, non-edges are 255, with
-        # all values in between being weak/strong edges.
-        final_edgemap = (255.0 * (1.0 - avg_edgemap)).astype(np.uint8)
-
-        return final_edgemap
+from custom_logging import debug
 
 ###############################################################################
 
 # Load the model in.
-model = DexinedModel(DEXINED_MODEL_PATH)
+debug(f"Loading model from {DEXINED_MODEL_PATH}")
+model = tf.saved_model.load_v2(DEXINED_MODEL_PATH)
+# rgb_mean = [103.939, 116.779, 123.68]
+
+session = tf.keras.backend.get_session()
+init = tf.global_variables_initializer()
+session.run(init)
+
+def normalize(img):
+    """
+    This is a typical image normalization function to normalize the image
+    to values in the range [0, 255].
+    source: https://en.wikipedia.org/wiki/Normalization_(image_processing)
+
+    Args:
+        :img: - a numpy array, either grayscale or RGB
+
+    Returns:
+        :img_normed: - a uint8 numpy array, with all values in range [0, 255]
+    """
+    img = np.float32(img)
+    epsilon = 1e-12
+    v_min = np.min(img)
+    v_max = np.max(img) - np.min(img) + epsilon
+
+    img_normed = (img - v_min) / v_max
+    img_normed = np.uint8(img_normed * 255.0)
+    return img_normed
 
 
 def get_dexined_edges(img):
@@ -183,10 +79,30 @@ def get_dexined_edges(img):
         :img: - an RGB image as a numpy array
 
     Returns:
-        :avg_edgemap: - a grayscale image, of the same height/width
+        :edgemap: - a grayscale image, of the same height/width
             as the input img.
     """
-    return model.run(img)
+    h, w, _ = img.shape
+    img = img.astype(np.float32)
+
+    # Image must be float32 and range from 0.0 to 255.0
+    if np.max(img) <= 1.0:
+        img *= 255.0
+
+    img = skimage.transform.resize(img, (512, 512),
+            preserve_range=True)
+
+    img_batch = img.reshape((1, 512, 512, -1))
+    img_batch = tf.constant(img_batch)
+    with session.as_default():
+        edgemap = model(img_batch).eval().squeeze()
+        edgemap[edgemap <= 0] = 0.0
+        # Normalize to values in range [0, 255]
+        edgemap = np.uint8(edgemap * 255)
+        edgemap = skimage.transform.resize(edgemap, (h, w),
+                preserve_range=True)
+
+    return edgemap
 
 
 if __name__ == "__main__":

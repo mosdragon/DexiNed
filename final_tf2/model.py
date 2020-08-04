@@ -251,7 +251,7 @@ class DexiNed(tf.keras.Model):
         return tensor[..., :height, :width]
 
 
-    def call(self, x):
+    def call(self, x, training=False):
         # Block 1
         x = x - self.rgb_mean
         block_1 = self.block_1(x)
@@ -306,8 +306,16 @@ class DexiNed(tf.keras.Model):
         results.append(block_cat)
         stack = tf.concat(results, 3)  # BxHxWx7
         stack = tf.sigmoid(stack)
-        avg_edgemap = tf.math.reduce_mean(stack, axis=-1, name="avg_edgemap")
-        return avg_edgemap
+
+        # Take the average across all 7 edgemaps
+        avg_edgemap = tf.math.reduce_mean(stack, axis=-1)
+
+        # Squeeze the data out so it's B x H x W
+        squeezed_edgemap = tf.squeeze(avg_edgemap)
+
+        # Cast to uint8 and ensure values are 0 to 255.
+        final_edgemap = tf.cast(squeezed_edgemap * 255, tf.uint8, name="final_edge_map")
+        return final_edgemap
 
 def weighted_cross_entropy_loss(input, label):
     y = tf.cast(label,dtype=tf.float32)
