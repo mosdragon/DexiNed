@@ -314,7 +314,7 @@ class DexiNed(tf.keras.Model):
         squeezed_edgemap = tf.squeeze(avg_edgemap)
 
         # Cast to uint8 and ensure values are 0 to 255.
-        final_edgemap = tf.cast(squeezed_edgemap * 255, tf.uint8, name="final_edge_map")
+        final_edgemap = tf.cast(squeezed_edgemap * 255, tf.int32, name="final_edge_map")
         return final_edgemap
 
 def weighted_cross_entropy_loss(input, label):

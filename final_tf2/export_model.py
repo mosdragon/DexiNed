@@ -66,7 +66,7 @@ if __name__ == '__main__':
     imwrite(out_filepath, avg)
 
     # Save to final checkpoint name
-    filepath = "checkpoints/dexined_normalized/"
+    filepath = "checkpoints/dexined_normalized_int32/"
     print(f"Saving exported model to {filepath}")
     tf.saved_model.save(model, filepath)
 
